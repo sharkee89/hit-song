@@ -7,7 +7,7 @@ import os
 
 def analyze_dataset(file_path):
     if not os.path.exists(file_path):
-        alternative_path = os.path.join('..', 'dataset.csv')
+        alternative_path = os.path.join('..', 'data', 'dataset', 'dataset_enriched.csv')
         if os.path.exists(alternative_path):
             file_path = alternative_path
         else:
@@ -59,6 +59,6 @@ def analyze_dataset(file_path):
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    default_dataset_path = os.path.join(current_dir, '..', 'dataset_enriched.csv')
+    default_dataset_path = os.path.join(current_dir, '..', 'data', 'dataset', 'dataset_enriched.csv')
 
     analyze_dataset(default_dataset_path)
