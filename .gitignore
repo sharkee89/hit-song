@@ -29,7 +29,7 @@ wheels/
 *.pth
 *.pt
 *.ckpt
-*.joblib
+#*.joblib
 *.npy
 *.npz
 
