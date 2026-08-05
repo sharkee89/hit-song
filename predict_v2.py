@@ -46,7 +46,7 @@ def get_artist_context(artist_name):
     return {"authority_score": 1.0, "area": "Unknown", "type": "Person"}
 
 
-def analyze_audio(file_path):
+def  analyze_audio(file_path):
     """Vrši duboku MIR analizu audio fajla"""
     y, sr = librosa.load(file_path, duration=60)
 

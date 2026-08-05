@@ -1,10 +1,16 @@
 import os
+import sys
 import time
 import torch
 import torch.nn as nn
 import onnxruntime as ort
 import psutil
 import numpy as np
+
+# Optimizacija niti za konzistentnost merenja
+os.environ['NUMBA_NUM_THREADS'] = '1'
+os.environ['OMP_NUM_THREADS'] = '1'
+
 
 class HitPredictionModel(nn.Module):
     def __init__(self):
@@ -25,14 +31,14 @@ def proveri_memoriju_mb():
 if __name__ == "__main__":
     print("🚀 Započinjemo pripremu benchmark testova za ISO/IEC 25010...")
 
-    # Inicijalizacija PyTorch modela sa tvojim težinama
+    # 1. Inicijalizacija PyTorch modela sa specifičnim težinama orkestratora
     pytorch_model = HitPredictionModel()
     with torch.no_grad():
         pytorch_model.linear.weight = nn.Parameter(torch.tensor([[0.4, 0.5, 0.1, 0.2]]))
         pytorch_model.linear.bias = nn.Parameter(torch.tensor([-1.2]))
     pytorch_model.eval()
 
-    # Eksportovanje u ONNX format
+    # 2. Eksportovanje u ONNX format (Statički binarni graf)
     onnx_path = "hit_predictor.onnx"
     dummy_input_tensor = torch.randn(1, 4)
     torch.onnx.export(
@@ -48,37 +54,47 @@ if __name__ == "__main__":
     )
     print(f"✅ Uspešno generisan statički binarni graf: {onnx_path}\n")
 
-    # Simuliramo dataset od 1000 pesama (4 signala po pesmi u opsegu [0.0 - 1.0])
+    # 3. Simulacija skupa podataka od 1000 pesama (4 signala po pesmi [0.0 - 1.0])
     BROJ_PESAMA = 1000
     test_data_np = np.random.rand(BROJ_PESAMA, 4).astype(np.float32)
     test_data_torch = torch.tensor(test_data_np)
 
     # ==========================================
-    # TEST 2: MEMORY FOOTPRINT BENCHMARK
+    # --- WARM-UP FAZA (Izolovano od merenja) ---
     # ==========================================
-    print("📊 [TEST 2] Pokrećem Memory Footprint test...")
-
-    # PyTorch Memorija
-    mem_start_pt = proveri_memoriju_mb()
-    # Simuliramo alokaciju framework resursa
-    _ = pytorch_model(test_data_torch[0:1])
-    mem_end_pt = proveri_memoriju_mb()
-    ram_pytorch = mem_end_pt - mem_start_pt
-
-    # ONNX Memorija
-    mem_start_onnx = proveri_memoriju_mb()
+    # Inicijalizujemo ONNX sesiju unapred da C++ runtime overhead ne uđe u RAM test
     ort_session = ort.InferenceSession(onnx_path)
     input_name = ort_session.get_inputs()[0].name
+
+    # Propuštamo po jedan podatak da oba frameworka alociraju svoje interne bafera
+    with torch.no_grad():
+        _ = pytorch_model(test_data_torch[0:1])
     _ = ort_session.run(None, {input_name: test_data_np[0:1]})
+
+    # ==========================================
+    # TEST 2: MEMORY FOOTPRINT BENCHMARK (Neto)
+    # ==========================================
+    print("📊 [TEST 2] Pokrećem Memory Footprint test (Neto alokacija)...")
+
+    # PyTorch Neto Memorija za matričnu obradu
+    mem_start_pt = proveri_memoriju_mb()
+    with torch.no_grad():
+        _ = pytorch_model(test_data_torch)
+    mem_end_pt = proveri_memoriju_mb()
+    ram_pytorch = max(0.0, mem_end_pt - mem_start_pt)
+
+    # ONNX Neto Memorija za matričnu obradu
+    mem_start_onnx = proveri_memoriju_mb()
+    _ = ort_session.run(None, {input_name: test_data_np})
     mem_end_onnx = proveri_memoriju_mb()
-    ram_onnx = mem_end_onnx - mem_start_onnx
+    ram_onnx = max(0.0, mem_end_onnx - mem_start_onnx)
 
     # ==========================================
     # TEST 1 & 3: LATENCY & THROUGHPUT (STRESS)
     # ==========================================
-    print("⏱️ [TEST 1 & 3] Pokrećem Latency i Throughput testove...")
+    print("⏱️ [TEST 1 & 3] Pokrećem Latency i Throughput testove (Iterativno)...")
 
-    # PyTorch izvršavanje
+    # PyTorch vremenske performanse
     start_pt = time.perf_counter()
     with torch.no_grad():
         for i in range(BROJ_PESAMA):
@@ -88,7 +104,7 @@ if __name__ == "__main__":
     latencija_pt = (ukupno_vreme_pt / BROJ_PESAMA) * 1000
     throughput_pt = BROJ_PESAMA / ukupno_vreme_pt
 
-    # ONNX izvršavanje
+    # ONNX vremenske performanse
     start_onnx = time.perf_counter()
     for i in range(BROJ_PESAMA):
         _ = ort_session.run(None, {input_name: test_data_np[i:i + 1]})
@@ -100,16 +116,21 @@ if __name__ == "__main__":
     # ==========================================
     # KONAČAN PRIKAZ REZULTATA ZA RAD
     # ==========================================
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 60)
     print("📈 KONAČNI REZULTATI PERFORMANSI (ISO/IEC 25010)")
-    print("=" * 50)
-    print(f"{'Metrika':<30} | {'PyTorch':<12} | {'ONNX Runtime':<12}")
-    print("-" * 50)
-    print(f"{'Avg Latency (Time Behaviour)':<30} | {latencija_pt:.4f} ms | {latencija_onnx:.4f} ms")
-    print(f"{'RAM Footprint (Resource Util)':<30} | {ram_pytorch:.4f} MB | {ram_onnx:.4f} MB")
-    print(f"{'Throughput (Capacity)':<30} | {throughput_pt:.1f} p/s  | {throughput_onnx:.1f} p/s")
-    print("=" * 50)
+    print("=" * 60)
+    print(f"{'Metrika (Karakteristika kvaliteta)':<36} | {'PyTorch':<10} | {'ONNX Runtime':<12}")
+    print("-" * 60)
+    print(f"{'Avg Latency (Time Behaviour)':<36} | {latencija_pt:.4f} ms | {latencija_onnx:.4f} ms")
+    print(f"{'RAM Footprint (Resource Util - Neto)':<36} | {ram_pytorch:.4f} MB | {ram_onnx:.4f} MB")
+    print(f"{'Throughput (Capacity)':<36} | {throughput_pt:.1f} p/s  | {throughput_onnx:.1f} p/s")
+    print("=" * 60)
 
-    faktor_ubrzanja = latencija_pt / latencija_onnx if latencija_onnx > 0 else 0
-    print(
-        f"💡 ONNX runtime izvršava fuziju algoritama {faktor_ubrzanja:.1f}x brže od izvornog PyTorch framework-a.")
+    if latencija_onnx > 0:
+        faktor_ubrzanja = latencija_pt / latencija_onnx
+        print(
+            f"💡 ONNX Runtime izvršava fuziju algoritama {faktor_ubrzanja:.1f}x brže od izvornog PyTorch framework-a.\n")
+
+    # Čišćenje generisanog ONNX fajla nakon testa (opciono)
+    if os.path.exists(onnx_path):
+        os.remove(onnx_path)
