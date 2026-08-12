@@ -14,6 +14,7 @@ except ImportError:
 
 try:
     from pydub import AudioSegment
+
     PYDUB_AVAILABLE = True
 except ImportError:
     PYDUB_AVAILABLE = False
@@ -26,25 +27,37 @@ class NeuralAudioAgent:
         self.client = genai.Client(api_key=api_key)
         self.mir_weight = max(0.0, min(1.0, mir_weight))
 
-    def _trim_best_segment(self, file_path: str, best_segment: dict) -> str:
+    def _trim_best_segment(self, file_path: str, best_segment: dict) -> tuple[str, float]:
+        """Iseca reprezentativni segment i meri vreme dekodiranja/upisivanja na disk."""
+        start_time = time.perf_counter()
+
         if not PYDUB_AVAILABLE:
             print(f"[{self.name}]: Pydub nije instaliran. Šaljem ceo fajl na API...")
-            return file_path
+            elapsed = (time.perf_counter() - start_time) * 1000
+            return file_path, round(elapsed, 2)
+
         try:
-            print(f"[{self.name}]: Isecam reprezentativni segment for LLM...")
+            print(f"[{self.name}]: Isecam reprezentativni segment za LLM (Pydub/CPU)...")
             song = AudioSegment.from_file(file_path)
             start_ms = int(best_segment['start'] * 1000)
             end_ms = int(best_segment['end'] * 1000)
             trimmed_song = song[start_ms:end_ms]
+
             trimmed_path = f"trimmed_temp_{os.path.basename(file_path)}"
             trimmed_song.export(trimmed_path, format="mp3")
-            return trimmed_path
-        except Exception as e:
-            print(f"[{self.name}]: Greška pri sečenju fajla ({e}). Koristim originalni fajl.")
-            return file_path
 
-    def _get_deep_audio_insight(self, file_path: str, raw_metrics: dict) -> dict:
-        """Šalje audio isečak na Gemini 2.0 sa ugrađenom autonomnom Retry logikom."""
+            elapsed = (time.perf_counter() - start_time) * 1000
+            print(f"[{self.name}]: CPU slicing i export na disk završeni za {elapsed:.2f} ms")
+            return trimmed_path, round(elapsed, 2)
+
+        except Exception as e:
+            elapsed = (time.perf_counter() - start_time) * 1000
+            print(f"[{self.name}]: Greška pri sečenju fajla ({e}). Koristim originalni fajl.")
+            return file_path, round(elapsed, 2)
+
+    def _get_deep_audio_insight(self, file_path: str, raw_metrics: dict) -> tuple[dict, float]:
+        """Šalje audio isečak na Gemini 2.0 i meri vreme trajanja mrežne/API obrade."""
+        start_time = time.perf_counter()
         print(f"[{self.name}]: Pokrećem multimodalnu analizu produkcije (Gemini)...")
 
         json_schema = {
@@ -101,7 +114,8 @@ class NeuralAudioAgent:
                 if "trimmed_temp_" in file_path and os.path.exists(file_path):
                     os.remove(file_path)
 
-                return json.loads(response.text)
+                elapsed = (time.perf_counter() - start_time) * 1000
+                return json.loads(response.text), round(elapsed, 2)
 
             except Exception as e:
                 # Provera da li je u pitanju privremeni Rate Limit (429)
@@ -110,17 +124,18 @@ class NeuralAudioAgent:
                         print(f"⚠️ [{self.name}]: Detektovan 429 Rate Limit (Pokušaj {attempt + 1}/{max_attempts}).")
                         print(f"⏳ [Oporavak]: Pauziram izvršavanje na {initial_delay} sekundi pre ponovnog pokušaja...")
                         time.sleep(initial_delay)
-                        continue  # Skače na sledeću iteraciju petlje (ponovni pokušaj)
+                        continue  # Ponovni pokušaj
 
-                # Za sve ostale trajne greške (ili ako su ispucani svi pokušaji), idemo na lokalni fallback
                 print(f"❌ [{self.name}]: KONAČNA GOOGLE GREŠKA NAKON RETRY-ja: {str(e)}")
                 print(f"[{self.name}]: Prelazim na lokalni heuristički fallback.")
                 if os.path.exists(file_path) and "trimmed_temp_" in file_path:
                     os.remove(file_path)
-                return self._generate_heuristic_fallback(raw_metrics)
 
-        # Sigurnosni povratak u slučaju nepredviđenog izlaza iz petlje
-        return self._generate_heuristic_fallback(raw_metrics)
+                elapsed = (time.perf_counter() - start_time) * 1000
+                return self._generate_heuristic_fallback(raw_metrics), round(elapsed, 2)
+
+        elapsed = (time.perf_counter() - start_time) * 1000
+        return self._generate_heuristic_fallback(raw_metrics), round(elapsed, 2)
 
     def _generate_heuristic_fallback(self, raw_metrics: dict) -> dict:
         energy = raw_metrics.get('energy_%', 50) / 100
@@ -131,20 +146,33 @@ class NeuralAudioAgent:
         }
 
     def process_track(self, file_path: str) -> dict:
+        total_start = time.perf_counter()
         print(f"\n[{self.name}]: Započeta obrada pesme: {file_path}")
+
         raw_features = analyze_audio(file_path)
         segments = identify_representative_segments(file_path)
         best_segment = max(segments, key=lambda x: x['energy_score'])
 
-        target_audio_path = self._trim_best_segment(file_path, best_segment)
-        ai_insights = self._get_deep_audio_insight(target_audio_path, raw_features)
+        # Sečenje i merenje CPU vremena za Pydub
+        target_audio_path, slicing_time_ms = self._trim_best_segment(file_path, best_segment)
+
+        # Gemini obrada i merenje API vremena
+        ai_insights, api_time_ms = self._get_deep_audio_insight(target_audio_path, raw_features)
 
         mir_signal = raw_features.get('energy_%', 0) / 100
         ai_signal = ai_insights.get('potential_score', 0.5)
         activation_value = (mir_signal * self.mir_weight) + (ai_signal * (1.0 - self.mir_weight))
 
+        total_elapsed = (time.perf_counter() - total_start) * 1000
+
         report = {
             "agent_name": self.name,
+            "device": "cpu",
+            "execution_benchmarks_ms": {
+                "slicing_and_disk_io_time_ms": slicing_time_ms,
+                "gemini_api_time_ms": api_time_ms,
+                "total_execution_time_ms": round(total_elapsed, 2)
+            },
             "config_weights": {
                 "mir_weight": self.mir_weight,
                 "ai_weight": round(1.0 - self.mir_weight, 2)
@@ -172,6 +200,7 @@ class NeuralAudioAgent:
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
+
     load_dotenv()
     GEMINI_API_KEY = os.getenv("GOOGLE_AI_API_KEY")
     if not GEMINI_API_KEY:
