@@ -409,7 +409,7 @@ class GPUAudioAgent:
         # 1. Učitavanje u VRAM
         waveform_gpu, sample_rate = self._load_audio_to_vram(file_path)
 
-        # 2. FAZA 2: Triton Custom MIR Engine obrada
+        # 2. Triton Custom MIR Engine obrada
         if self.device == "cuda" and self.mir_engine:
             mir_start = time.perf_counter()
             mir_metrics = self.mir_engine.extract_all_features(waveform_gpu)
