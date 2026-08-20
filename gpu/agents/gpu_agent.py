@@ -18,13 +18,22 @@ from pathlib import Path
 # if str(PROJECT_ROOT) not in sys.path:
 #     sys.path.insert(0, str(PROJECT_ROOT))
 
-from gpu.kernel.triton_kernel import (
-    fused_rms_energy_kernel,
-    triton_mel_kernel,
-    triton_chroma_kernel,
+from gpu.kernel.triton_kernel_utils import (
     build_chroma_filterbank,
     get_mel_filters,
     PITCH_NAMES,
+)
+
+from gpu.kernel.triton_chroma_kernel import (
+    triton_chroma_kernel
+)
+
+from gpu.kernel.fused_rms_energy_kernel import (
+    fused_rms_energy_kernel
+)
+
+from gpu.kernel.triton_mel_kernel import (
+    triton_mel_kernel
 )
 
 # =====================================================================

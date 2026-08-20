@@ -3,11 +3,17 @@ import torch
 import torchaudio
 import triton
 
-from gpu.kernel.triton_kernel import (
-    triton_mel_kernel,
-    triton_chroma_kernel,
+from gpu.kernel.triton_chroma_kernel import (
+    triton_chroma_kernel
+)
+
+from gpu.kernel.triton_kernel_utils import (
     build_chroma_filterbank,
     get_mel_filters
+)
+
+from gpu.kernel.triton_mel_kernel import (
+    triton_mel_kernel
 )
 
 FILE_PATH = r"C:\Users\Sharkee\Downloads\Aylex_-_Live_It_(freetouse.com).mp3"
