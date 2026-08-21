@@ -8,15 +8,14 @@ import triton
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-
 import sys
 from pathlib import Path
 
 # parent je 'agents', parent.parent je 'gpu', parent.parent.parent je 'machine_learning'
-# PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# if str(PROJECT_ROOT) not in sys.path:
-#     sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from gpu.kernel.triton_kernel_utils import (
     build_chroma_filterbank,
