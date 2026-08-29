@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import torch
+import torch.profiler
 import torchaudio
 import triton
 
@@ -35,7 +36,7 @@ FILE_PATHS = [
                  for i in range(2, 10)
              ]
 
-N_FFT, HOP_LENGTH, N_MELS = 2048, 512, 80
+N_FFT, HOP_LENGTH, N_MELS = 2048, 512, 128
 NUM_BINS = N_FFT // 2 + 1
 FRAME_SIZES = [512, 1024, 2048, 4096, 8192, 16384, 32768]
 
@@ -175,6 +176,27 @@ def run_benchmark():
         # MEL BENCHMARK
         py_mel_out = torch.empty((b_size, N_MELS, num_frames), device="cuda")
         tr_mel_out = torch.empty_like(py_mel_out)
+
+        # Uključivanje PyTorch Profilera za glavnu iteraciju
+        print(f"Pokrećem profiler za {label}...")
+        with torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            schedule=torch.profiler.schedule(wait=1, warmup=1, active=2, repeat=1),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/triton_bench'),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+        ) as prof:
+            for _ in range(5):
+                pytorch_batched_mel(spec_slice, mel_filters, py_mel_out)
+                call_triton_mel(spec_slice, mel_filters, tr_mel_out, NUM_BINS, N_MELS, num_frames)
+                pytorch_batched_chroma(spec_slice, chroma_map[:12], py_chr_out_dummy := torch.empty((b_size, 12, num_frames), device="cuda"))
+                call_triton_chroma(spec_slice, chroma_map, tr_chr_out_dummy := torch.zeros((b_size, 16, num_frames), device="cuda"), NUM_BINS, num_frames)
+                torch.cuda.synchronize()
+                prof.step()
 
         # Trka i merenje za PyTorch MEL
         py_mel_ms = benchmark_cuda(

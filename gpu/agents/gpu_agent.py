@@ -28,7 +28,7 @@ from gpu.kernel.triton_chroma_kernel import (
 )
 
 from gpu.kernel.fused_rms_energy_kernel import (
-    fused_rms_energy_kernel
+    triton_batched_mel_kernel
 )
 
 from gpu.kernel.triton_mel_kernel import (
@@ -60,7 +60,7 @@ class TritonMIREngine:
         grid = (num_frames,)
         BLOCK_SIZE = triton.next_power_of_2(self.n_fft)
 
-        fused_rms_energy_kernel[grid](
+        triton_batched_mel_kernel[grid](
             waveform_gpu,
             energy_output,
             total_samples,

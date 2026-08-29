@@ -153,7 +153,7 @@ class NeuralOrchestrator:
 if __name__ == "__main__":
     try:
         orchestrator = NeuralOrchestrator()
-        test_file = "/Users/admin/Downloads/National Anthem of Andorra.mp3"
+        test_file = r"C:\Users\Sharkee\Downloads\Aylex_-_Live_It_(freetouse.com).mp3"
         test_artist = "Taylor Swift"
 
         if os.path.exists(test_file):
