@@ -1,15 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
 import os
 import sys
 import torch
@@ -26,6 +14,7 @@ if PROJECT_ROOT not in sys.path:
 from audio.engine.cpu_engine import CPUAudioEngine
 from audio.engine.gpu_engine import GPUAudioEngine
 
+
 class AudioAgent:
 
     def __init__(self):
@@ -37,7 +26,7 @@ class AudioAgent:
             self.device = "cpu"
         print(f"[AudioAgent] Device: {self.device}")
 
-    def process_track(self, file_path: str) -> dict:
+    def process_audio_file(self, file_path: str) -> dict:
 
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Audio file does not exist: {file_path}")
@@ -70,5 +59,5 @@ class AudioAgent:
 if __name__ == "__main__":
     file_path = r"C:\Users\Sharkee\Downloads\Aylex_-_Live_It_(freetouse.com).mp3"
     agent = AudioAgent()
-    result = agent.process_track(file_path)
+    result = agent.process_audio_file(file_path)
     print(result)
