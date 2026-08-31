@@ -32,6 +32,7 @@ class GPUAudioEngine:
         print("PyTorch shape: ", rms_values.shape)
         print("All close: ", torch.allclose(triton_result, rms_values))
         print("Max error: ", torch.max(torch.abs(triton_result - rms_values)))
+        return triton_result
 
     def load(self, file_path: str):
         start_time = time.perf_counter()
@@ -40,7 +41,7 @@ class GPUAudioEngine:
         waveform = waveform.to(self.device)
         torch.cuda.synchronize(self.device)
         rms_values = rms(waveform, frame_size=2048)
-        self.rms_calculate_and_compare_triton_and_pytorch(waveform, rms_values)
+        data = self.rms_calculate_and_compare_triton_and_pytorch(waveform, rms_values)
         transfer_time = time.perf_counter()
 
         frame = waveform[0, :2048]
@@ -52,7 +53,7 @@ class GPUAudioEngine:
         print("magnitude: ", magnitude)
         print("max: ", max)
 
-        return waveform, sample_rate, {
+        return waveform, sample_rate, data, {
             "decode_time_ms": round(
                 (decode_time - start_time) * 1000, 2
             ),
