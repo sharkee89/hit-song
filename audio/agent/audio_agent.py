@@ -20,7 +20,7 @@ class AudioAgent:
 
         if self.device == "cuda":
             try:
-                from audio.engine.gpu_audio import GPUAudioEngine
+                from audio.engine.gpu_engine import GPUAudioEngine
                 self.engine = GPUAudioEngine()
             except ImportError as e:
                 print(f"⚠️ CUDA is unavailable, error during import gpu engine ({e}). Switching to CPU.")
