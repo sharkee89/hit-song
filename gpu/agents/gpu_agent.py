@@ -23,7 +23,7 @@ from gpu.kernel.triton_kernel_utils import (
     PITCH_NAMES,
 )
 
-from gpu.kernel.triton_chroma_kernel import (
+from audio.kernels.triton_chroma_kernel import (
     triton_chroma_kernel
 )
 
@@ -31,7 +31,7 @@ from gpu.kernel.fused_rms_energy_kernel import (
     triton_batched_mel_kernel
 )
 
-from gpu.kernel.triton_mel_kernel import (
+from audio.kernels.triton_mel_kernel import (
     triton_mel_kernel
 )
 

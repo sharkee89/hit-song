@@ -16,12 +16,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from analyze_kernel_performance import analyze_kernel_performance
-from gpu.kernel.triton_chroma_kernel import triton_chroma_kernel
+from audio.kernels.triton_chroma_kernel import triton_chroma_kernel
 from gpu.kernel.triton_kernel_utils import (
     build_chroma_filterbank,
     get_mel_filters,
 )
-from gpu.kernel.triton_mel_kernel import triton_mel_kernel
+from audio.kernels.triton_mel_kernel import triton_mel_kernel
 
 # ============================================================================
 # 2. KONFIGURACIJA I DEFINISANJE PUTANJA
