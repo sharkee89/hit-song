@@ -1,0 +1,53 @@
+# --- Python Basics ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- Environments ---
+.env
+.venv/
+venv/
+env/
+bin/
+node_modules/
+lib/
+develop-eggs/
+dist/
+eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- Machine Learning & Models ---
+*.onnx
+*.pth
+*.pt
+*.ckpt
+#*.joblib
+*.npy
+*.npz
+
+# --- IDEs & Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints
+
+# --- Logs & Databases ---
+*.log
+local_settings.py
+db.sqlite3
+instance/
+
+# --- Files ---
+data/testing_songs

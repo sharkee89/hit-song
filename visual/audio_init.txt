@@ -1,0 +1,20 @@
+                 AUDIO
+                   │
+          ┌────────┴────────┐
+          │                 │
+          ▼                 ▼
+    Quantitative        Descriptive
+       branch              branch
+          │                 │
+          ▼                 ▼
+ GPU/CPU MIR             Gemini
+          │                 │
+          ▼                 ▼
+ Prediction Model       Text analysis
+          │                 │
+          ▼                 │
+ hit_potential             │
+          │                 │
+          └────────┬────────┘
+                   ▼
+                JSON
