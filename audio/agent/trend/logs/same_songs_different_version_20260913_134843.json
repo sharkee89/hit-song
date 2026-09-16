@@ -1,0 +1,53 @@
+{
+  "SAME_SONG_DIFFERENT_VERSION_1": {
+    "audio_path": "/Users/sharkee/Downloads/Adele-Hello.mp3",
+    "trend_alignment": 0.9339798582618426,
+    "cosine_distance": 0.010060787200927734,
+    "trend_feature_tensor": [
+      0.933979868888855,
+      0.010060787200927734
+    ],
+    "raw_result": {
+      "trend_alignment": 0.9339798582618426,
+      "cosine_distance": 0.010060787200927734,
+      "trend_feature_tensor": [
+        0.933979868888855,
+        0.010060787200927734
+      ]
+    }
+  },
+  "SAME_SONG_DIFFERENT_VERSION_2": {
+    "audio_path": "/Users/sharkee/Downloads/The_Weeknd-Blinding_Lights.mp3",
+    "trend_alignment": 0.6723237597911227,
+    "cosine_distance": 0.03847205638885498,
+    "trend_feature_tensor": [
+      0.6723237633705139,
+      0.03847205638885498
+    ],
+    "raw_result": {
+      "trend_alignment": 0.6723237597911227,
+      "cosine_distance": 0.03847205638885498,
+      "trend_feature_tensor": [
+        0.6723237633705139,
+        0.03847205638885498
+      ]
+    }
+  },
+  "SAME_SONG_DIFFERENT_VERSION_3": {
+    "audio_path": "/Users/sharkee/Downloads/Ed_Sheeran-Shape_of_You.mp3",
+    "trend_alignment": 0.9998135024244685,
+    "cosine_distance": 0.009012699127197266,
+    "trend_feature_tensor": [
+      0.9998134970664978,
+      0.009012699127197266
+    ],
+    "raw_result": {
+      "trend_alignment": 0.9998135024244685,
+      "cosine_distance": 0.009012699127197266,
+      "trend_feature_tensor": [
+        0.9998134970664978,
+        0.009012699127197266
+      ]
+    }
+  }
+}

@@ -51,3 +51,8 @@ instance/
 
 # --- Files ---
 data/testing_songs
+data/old/
+data/processed/
+data/dataset/
+*.joblib
+joblib/

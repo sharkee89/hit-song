@@ -1,0 +1,57 @@
+{
+    "test_name": "audio_embedding_similarity_between_versions",
+    "songs": {
+        "SAME_SONG_DIFFERENT_VERSION_1": {
+            "audio_file": "/Users/sharkee/Downloads/Adele-Hello.mp3",
+            "embedding_dimension": 2048
+        },
+        "SAME_SONG_DIFFERENT_VERSION_2": {
+            "audio_file": "/Users/sharkee/Downloads/Adele-All_I_Ask.mp3",
+            "embedding_dimension": 2048
+        },
+        "SAME_SONG_DIFFERENT_VERSION_3": {
+            "audio_file": "/Users/sharkee/Downloads/Adele-When_We_Were_Young.mp3",
+            "embedding_dimension": 2048
+        }
+    },
+    "cosine_distance_matrix": {
+        "SAME_SONG_DIFFERENT_VERSION_1": {
+            "SAME_SONG_DIFFERENT_VERSION_1": 0.0,
+            "SAME_SONG_DIFFERENT_VERSION_2": 0.13643282651901245,
+            "SAME_SONG_DIFFERENT_VERSION_3": 0.034307122230529785
+        },
+        "SAME_SONG_DIFFERENT_VERSION_2": {
+            "SAME_SONG_DIFFERENT_VERSION_1": 0.13643282651901245,
+            "SAME_SONG_DIFFERENT_VERSION_2": 0.0,
+            "SAME_SONG_DIFFERENT_VERSION_3": 0.14682519435882568
+        },
+        "SAME_SONG_DIFFERENT_VERSION_3": {
+            "SAME_SONG_DIFFERENT_VERSION_1": 0.034307122230529785,
+            "SAME_SONG_DIFFERENT_VERSION_2": 0.14682519435882568,
+            "SAME_SONG_DIFFERENT_VERSION_3": 0.0
+        }
+    },
+    "pairwise_comparisons": [
+        {
+            "song_a": "SAME_SONG_DIFFERENT_VERSION_1",
+            "song_b": "SAME_SONG_DIFFERENT_VERSION_2",
+            "audio_file_a": "/Users/sharkee/Downloads/Adele-Hello.mp3",
+            "audio_file_b": "/Users/sharkee/Downloads/Adele-All_I_Ask.mp3",
+            "cosine_distance": 0.13643282651901245
+        },
+        {
+            "song_a": "SAME_SONG_DIFFERENT_VERSION_1",
+            "song_b": "SAME_SONG_DIFFERENT_VERSION_3",
+            "audio_file_a": "/Users/sharkee/Downloads/Adele-Hello.mp3",
+            "audio_file_b": "/Users/sharkee/Downloads/Adele-When_We_Were_Young.mp3",
+            "cosine_distance": 0.034307122230529785
+        },
+        {
+            "song_a": "SAME_SONG_DIFFERENT_VERSION_2",
+            "song_b": "SAME_SONG_DIFFERENT_VERSION_3",
+            "audio_file_a": "/Users/sharkee/Downloads/Adele-All_I_Ask.mp3",
+            "audio_file_b": "/Users/sharkee/Downloads/Adele-When_We_Were_Young.mp3",
+            "cosine_distance": 0.14682519435882568
+        }
+    ]
+}

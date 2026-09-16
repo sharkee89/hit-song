@@ -14,7 +14,7 @@ def run_matching():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(current_dir)
     data_dir = os.path.join(project_root, 'data', 'dataset')
-    top_songs_path = os.path.join(data_dir, 'spotify_top_songs_data_2026.csv')
+    top_songs_path = os.path.join(data_dir, 'trend_2.csv')
     enriched_path = os.path.join(data_dir, 'dataset_enriched.csv')
     output_path = os.path.join(data_dir, 'dataset_trend.csv.csv')
 
