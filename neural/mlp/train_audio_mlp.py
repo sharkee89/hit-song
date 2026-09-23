@@ -9,11 +9,12 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 
 
-# 1. Definisanje Custom Dataset klase za učitavanje postojećih .npy embedding-a
+# 1. Definisanje Custom Dataset klase za učitavanje postojećih .npy embedding-a sa nenadgledanim ciljem
 class AudioEmbeddingDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, embeddings_dir: Path):
+    def __init__(self, df: pd.DataFrame, embeddings_dir: Path, centroid: np.ndarray):
         self.df = df.reset_index(drop=True)
         self.embeddings_dir = embeddings_dir
+        self.centroid = centroid
 
     def __len__(self):
         return len(self.df)
@@ -32,8 +33,11 @@ class AudioEmbeddingDataset(Dataset):
             # Fallback ako fajl ne postoji (nule)
             audio_emb = np.zeros(2048, dtype=np.float32)
 
-        # Ciljna vrednost (Target) - normalizovana popularnost pesme (0.0 - 1.0)
-        target = float(row.get('popularity', 0.0)) / 100.0
+        # Nenadgledani cilj: Euklidska udaljenost od globalnog centroida
+        distance = np.linalg.norm(audio_emb - self.centroid)
+
+        # Skaliranje udaljenosti u opseg [0.0, 1.0] (manja udaljenost od centra -> veći kvalitet produkcije)
+        target = float(1.0 / (1.0 + distance))
 
         return torch.tensor(audio_emb, dtype=torch.float32), torch.tensor([target], dtype=torch.float32)
 
@@ -79,14 +83,28 @@ def main():
     print("Učitavanje parquet metapodataka...")
     df = pd.read_parquet(PARQUET_PATH)
 
-    # Filtriramo samo one redove koji imaju validan ID
-    df_valid = df.dropna(subset=['popularity']).copy()
-
     # Deljenje na trening i validaciju (80% - 20%)
-    train_df, val_df = train_test_split(df_valid, test_size=0.2, random_state=42)
+    train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
 
-    train_dataset = AudioEmbeddingDataset(train_df, EMBEDDINGS_DIR)
-    val_dataset = AudioEmbeddingDataset(val_df, EMBEDDINGS_DIR)
+    # Računanje globalnog centroida iz trening embedding-a (uzorak od max 10.000 pesama radi brzine)
+    print("Računam globalni centroid embedding prostora...")
+    all_embeddings = []
+    for idx, row in train_df.iterrows():
+        track_id = str(row.get('id', row.get('track_id', row.name)))
+        npy_path = EMBEDDINGS_DIR / f"{track_id}.npy"
+        if npy_path.exists():
+            all_embeddings.append(np.load(npy_path))
+        if len(all_embeddings) >= 10000:
+            break
+
+    if len(all_embeddings) > 0:
+        centroid = np.mean(np.array(all_embeddings), axis=0)
+    else:
+        centroid = np.zeros(2048, dtype=np.float32)
+    print("Centroid uspešno izračunat!")
+
+    train_dataset = AudioEmbeddingDataset(train_df, EMBEDDINGS_DIR, centroid)
+    val_dataset = AudioEmbeddingDataset(val_df, EMBEDDINGS_DIR, centroid)
 
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True, drop_last=True)
     val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
@@ -99,7 +117,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     epochs = 15
-    print("Započinjanje treniranja Audio Agent mreže...")
+    print("Započinjanje treniranja Audio Agent mreže (nenadgledani pristup)...")
 
     for epoch in range(epochs):
         model.train()
