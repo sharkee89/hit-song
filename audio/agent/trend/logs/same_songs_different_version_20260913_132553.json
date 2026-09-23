@@ -1,0 +1,80 @@
+{
+  "SAME_SONG_DIFFERENT_VERSION_1": {
+    "audio_path": "/Users/sharkee/Downloads/Adele-Hello.mp3",
+    "trend_alignment": 0.9339798582618426,
+    "cosine_distance": 0.010060787200927734,
+    "trend_feature_tensor": [
+      0.933979868888855,
+      0.010060787200927734
+    ],
+    "raw_result": {
+      "trend_alignment": 0.9339798582618426,
+      "cosine_distance": 0.010060787200927734,
+      "matched_track_id": "0ENSn4fwAbCGeFGVUbXEU3",
+      "matched_track_name": "Hello",
+      "matched_artist_name": "Adele",
+      "matched_track_trend_alignment": 0.9339798582618426,
+      "best_window_idx": 25,
+      "match_type": "close_audio_neighbor",
+      "similarity_threshold": 0.15,
+      "num_reference_tracks": 1233,
+      "num_target_windows": 35,
+      "trend_feature_tensor": [
+        0.933979868888855,
+        0.010060787200927734
+      ]
+    }
+  },
+  "SAME_SONG_DIFFERENT_VERSION_2": {
+    "audio_path": "/Users/sharkee/Downloads/Adele-Hello_Live.mp3",
+    "trend_alignment": 0.685005594927266,
+    "cosine_distance": 0.03294140100479126,
+    "trend_feature_tensor": [
+      0.6850056052207947,
+      0.03294140100479126
+    ],
+    "raw_result": {
+      "trend_alignment": 0.685005594927266,
+      "cosine_distance": 0.03294140100479126,
+      "matched_track_id": "6HbI4e2Y2f6HYVV6r04M4W",
+      "matched_track_name": "All I Ask",
+      "matched_artist_name": "Adele",
+      "matched_track_trend_alignment": 0.685005594927266,
+      "best_window_idx": 9,
+      "match_type": "close_audio_neighbor",
+      "similarity_threshold": 0.15,
+      "num_reference_tracks": 1233,
+      "num_target_windows": 29,
+      "trend_feature_tensor": [
+        0.6850056052207947,
+        0.03294140100479126
+      ]
+    }
+  },
+  "SAME_SONG_DIFFERENT_VERSION_3": {
+    "audio_path": "/Users/sharkee/Downloads/Adele-Hello_Unplugged.mp3",
+    "trend_alignment": 0.948526669153301,
+    "cosine_distance": 0.041663527488708496,
+    "trend_feature_tensor": [
+      0.9485266804695129,
+      0.041663527488708496
+    ],
+    "raw_result": {
+      "trend_alignment": 0.948526669153301,
+      "cosine_distance": 0.041663527488708496,
+      "matched_track_id": "38DgNqC7TQkZ3Ih5Vz6K0Q",
+      "matched_track_name": "Call Me Maybe",
+      "matched_artist_name": "Carly Rae Jepsen",
+      "matched_track_trend_alignment": 0.948526669153301,
+      "best_window_idx": 14,
+      "match_type": "close_audio_neighbor",
+      "similarity_threshold": 0.15,
+      "num_reference_tracks": 1233,
+      "num_target_windows": 18,
+      "trend_feature_tensor": [
+        0.9485266804695129,
+        0.041663527488708496
+      ]
+    }
+  }
+}

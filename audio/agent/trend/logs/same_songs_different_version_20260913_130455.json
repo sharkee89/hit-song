@@ -1,0 +1,53 @@
+{
+  "SAME_SONG_DIFFERENT_VERSION_1": {
+    "audio_path": "/Users/sharkee/Downloads/Adele-Hello.mp3",
+    "trend_alignment": 0.9339798582618426,
+    "cosine_distance": 0.010060787200927734,
+    "trend_feature_tensor": [
+      0.933979868888855,
+      0.010060787200927734
+    ],
+    "raw_result": {
+      "trend_alignment": 0.9339798582618426,
+      "cosine_distance": 0.010060787200927734,
+      "trend_feature_tensor": [
+        0.933979868888855,
+        0.010060787200927734
+      ]
+    }
+  },
+  "SAME_SONG_DIFFERENT_VERSION_2": {
+    "audio_path": "/Users/sharkee/Downloads/Adele-Hello_Live.mp3",
+    "trend_alignment": 0.685005594927266,
+    "cosine_distance": 0.03294140100479126,
+    "trend_feature_tensor": [
+      0.6850056052207947,
+      0.03294140100479126
+    ],
+    "raw_result": {
+      "trend_alignment": 0.685005594927266,
+      "cosine_distance": 0.03294140100479126,
+      "trend_feature_tensor": [
+        0.6850056052207947,
+        0.03294140100479126
+      ]
+    }
+  },
+  "SAME_SONG_DIFFERENT_VERSION_3": {
+    "audio_path": "/Users/sharkee/Downloads/Adele-Hello_Unplugged.mp3",
+    "trend_alignment": 0.948526669153301,
+    "cosine_distance": 0.041663527488708496,
+    "trend_feature_tensor": [
+      0.9485266804695129,
+      0.041663527488708496
+    ],
+    "raw_result": {
+      "trend_alignment": 0.948526669153301,
+      "cosine_distance": 0.041663527488708496,
+      "trend_feature_tensor": [
+        0.9485266804695129,
+        0.041663527488708496
+      ]
+    }
+  }
+}

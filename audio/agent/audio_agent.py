@@ -1,36 +1,49 @@
+import io
+import json
 import os
 import sys
-import json
+import librosa
+import numpy as np
+import soundfile as sf
 import torch
-import triton
+import torchvision.models as models
+from torchvision.models import ResNet50_Weights
 from dotenv import load_dotenv
 
+import ssl
+import certifi
+
+_context = ssl.create_default_context(cafile=certifi.where())
+ssl._create_default_https_context = lambda: _context
+
+# Ensure root path resolution
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(
         os.path.dirname(os.path.abspath(__file__))
     )
 )
-
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from audio.kernels.rms_kernel import triton_rms
-from audio.kernels.spectral_centroid_kernel import spectral_centroid_kernel
-from audio.kernels.triton_chroma_kernel import triton_chroma_kernel
-from audio.kernels.triton_mel_kernel import triton_mel_kernel
+from audio.ai.ai_engine import AIEngine
 
 
 class AudioAgent:
 
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+    def __init__(self, device: str = None):
+        # 1. Device and Engine setup
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
 
         if self.device == "cuda":
             try:
                 from audio.engine.gpu_engine import GPUAudioEngine
+                from audio.kernels.rms_kernel import triton_rms
                 self.engine = GPUAudioEngine()
             except ImportError as e:
-                print(f"⚠️ CUDA is unavailable, error during import gpu engine ({e}). Switching to CPU.")
+                print(f"⚠️ CUDA is unavailable or engine missing ({e}). Switching to CPU.")
                 from audio.engine.cpu_engine import CPUAudioEngine
                 self.engine = CPUAudioEngine()
                 self.device = "cpu"
@@ -38,162 +51,151 @@ class AudioAgent:
             from audio.engine.cpu_engine import CPUAudioEngine
             self.engine = CPUAudioEngine()
 
-        print(f"[AudioAgent] Device: {self.device}")
+        print(f"[AudioAgent] Execution Device: {self.device}")
+
+        # 2. ResNet-50 Embedding Extraction Model Setup
+        weights = ResNet50_Weights.DEFAULT
+        resnet = models.resnet50(weights=weights)
+        self.embedding_model = torch.nn.Sequential(*(list(resnet.children())[:-1])).to(self.device)
+        self.embedding_model.eval()
+
+    def _find_best_offset_samples(self, y: np.ndarray, sr: int = 22050, target_duration: float = 30.0) -> int:
+        """
+        Calculates starting sample index corresponding to peak RMS energy density.
+        """
+        target_samples = int(sr * target_duration)
+        if len(y) <= target_samples:
+            return 0
+
+        hop_length = 512
+        rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+        window_frames = int(target_samples / hop_length)
+
+        if len(rms) <= window_frames:
+            return 0
+
+        energy_profile = np.convolve(rms, np.ones(window_frames), mode="valid")
+        max_frame_idx = int(np.argmax(energy_profile))
+        start_sample = max_frame_idx * hop_length
+
+        return min(start_sample, len(y) - target_samples)
+
+    def extract_features(self, source: str | io.BytesIO) -> list:
+        """
+        Extracts single 2048-dimensional ResNet-50 embedding vector from local path or byte buffer
+        using the optimal 30s peak RMS energy window.
+        """
+        sr = 22050
+        target_duration = 30.0
+        target_samples = int(sr * target_duration)
+
+        try:
+            y, _ = librosa.load(source, sr=sr, mono=True)
+        except Exception as err:
+            raise ValueError(f"Failed to decode audio source: {err}")
+
+        if len(y) == 0:
+            raise ValueError("Loaded audio signal is empty.")
+
+        if len(y) > target_samples:
+            start_sample = self._find_best_offset_samples(y, sr=sr, target_duration=target_duration)
+            y = y[start_sample: start_sample + target_samples]
+        else:
+            y = np.pad(y, (0, target_samples - len(y)))
+
+        return self._compute_embedding_from_signal(y, sr)
+
+    def extract_sliding_features(self, source: str | io.BytesIO, window_duration: float = 30.0, step_duration: float = 10.0) -> list[list]:
+        """
+        Extracts multiple 2048-dimensional ResNet-50 embedding vectors across the entire audio file
+        using a sliding window approach.
+        """
+        sr = 22050
+        try:
+            y, _ = librosa.load(source, sr=sr, mono=True)
+        except Exception as err:
+            raise ValueError(f"Failed to decode audio source: {err}")
+
+        if len(y) == 0:
+            raise ValueError("Loaded audio signal is empty.")
+
+        window_samples = int(sr * window_duration)
+        step_samples = int(sr * step_duration)
+
+        # If audio is shorter than window, fall back to standard single extraction
+        if len(y) <= window_samples:
+            return [self.extract_features(source)]
+
+        embeddings = []
+        for start_sample in range(0, len(y) - window_samples + 1, step_samples):
+            segment = y[start_sample:start_sample + window_samples]
+            emb = self._compute_embedding_from_signal(segment, sr)
+            embeddings.append(emb)
+
+        # Handle tail end if not cleanly divisible
+        if (len(y) - window_samples) % step_samples != 0:
+            segment = y[-window_samples:]
+            emb = self._compute_embedding_from_signal(segment, sr)
+            embeddings.append(emb)
+
+        return embeddings
+
+    def _compute_embedding_from_signal(self, y: np.ndarray, sr: int) -> list:
+        """Internal helper to convert a 30s audio signal numpy array into a ResNet-50 embedding vector."""
+        mel_spectrogram = librosa.feature.melspectrogram(
+            y=y, sr=sr, n_mels=128, n_fft=2048, hop_length=512
+        )
+        log_mel = librosa.power_to_db(mel_spectrogram, ref=np.max)
+
+        log_mel_scaled = (log_mel - log_mel.min()) / (log_mel.max() - log_mel.min() + 1e-6)
+
+        mel_rgb = np.stack([log_mel_scaled] * 3, axis=-1)
+        mel_rgb = np.transpose(mel_rgb, (2, 0, 1))
+
+        tensor_input = torch.tensor(mel_rgb, dtype=torch.float32).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            features = self.embedding_model(tensor_input)
+            features = features.squeeze().cpu().numpy().tolist()
+
+        return features
 
     def process_audio_file(self, file_path: str) -> str:
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Audio file does not exist: {file_path}")
+        """Processes audio through low-level C++/GPU/CPU engine for raw audio features."""
+        return self.engine.process_audio_file(file_path)
 
-        waveform, sample_rate, data, bench = self.engine.load(file_path)
+    def get_ai_analysis(self, audio_data):
+        """Passes extracted features to LLM / AIEngine for market analysis."""
+        ai_engine = AIEngine()
+        return ai_engine.get_audio_detail_analysis(audio_data)
 
-        channels = waveform.shape[0]
-        samples = waveform.shape[1]
-        duration = samples / sample_rate
+    def get_data(self, audio_data: str, audio_detail_analysis, resnet_vector: list) -> str:
+        """Combines raw feature extraction, AI analysis, and deep ResNet embedding vector into JSON."""
+        audio_data_dict = json.loads(audio_data)
+        audio_data_dict["ai_analysis"] = audio_detail_analysis
+        audio_data_dict["resnet_embedding"] = resnet_vector
+        return json.dumps(audio_data_dict, indent=4)
 
-        # 1. Izračunavanje RMS preko Triton kernela
-        rms_output = triton_rms(waveform, frame_size=2048)
-        average_rms = rms_output.mean().item()
-        peak_rms = rms_output.max().item()
-
-        channel_max, frame_max_idx = torch.max(rms_output, dim=1)
-        best_channel_idx = torch.argmax(channel_max).item()
-        peak_frame_index = frame_max_idx[best_channel_idx].item()
-        peak_second = round((peak_frame_index * 2048) / sample_rate, 2)
-        rms_frames_count = rms_output.shape[1]
-        energy_profile_sample = [round(val, 4) for val in rms_output[0, :100].tolist()]
-
-        # 2. Izračunavanje Spectral Centroid preko Triton kernela
-        n_fft = 2048
-        hop_length = 512
-        window = torch.hann_window(n_fft, device=waveform.device)
-
-        mono_waveform = waveform.mean(dim=0) if waveform.ndim > 1 else waveform
-        stft_result = torch.stft(
-            mono_waveform,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            window=window,
-            return_complex=True
-        )
-
-        magnitude = torch.abs(stft_result)
-        n_bins, num_frames = magnitude.shape
-        frequencies = torch.linspace(0, sample_rate / 2, n_bins, device=waveform.device)
-
-        centroid_output = torch.empty(num_frames, device=waveform.device, dtype=torch.float32)
-        spectral_centroid_kernel[(num_frames,)](
-            frequencies,
-            magnitude,
-            centroid_output,
-            n_bins,
-            BLOCK_SIZE=min(1024, n_bins)
-        )
-        centroid_output = torch.nan_to_num(centroid_output, nan=0.0, posinf=0.0, neginf=0.0)
-        average_centroid = centroid_output.mean().item()
-        peak_centroid = centroid_output.max().item()
-        centroid_profile_sample = [round(val, 2) for val in centroid_output[:100].tolist()]
-
-        # 3. Izračunavanje Chroma preko Triton kernela
-        # Kreiranje hromatske mape (12 tonova x n_bins)
-        chroma_map = torch.zeros((12, n_bins), device=waveform.device, dtype=torch.float32)
-        for i in range(n_bins):
-            freq = frequencies[i].item()
-            if freq > 20:
-                midi_note = 69 + 12 * torch.log2(torch.tensor(freq / 440.0))
-                pitch_class = int(torch.round(midi_note).item()) % 12
-                chroma_map[pitch_class, i] = 1.0
-
-        chroma_out = torch.zeros((1, 12, num_frames), device=waveform.device, dtype=torch.float32)
-        grid_chroma = lambda meta: (triton.cdiv(num_frames, meta['BLOCK_SIZE_N']), 1)
-        triton_chroma_kernel[grid_chroma](
-            magnitude.unsqueeze(0),
-            chroma_map,
-            chroma_out,
-            num_bins=n_bins,
-            num_frames=num_frames,
-            stride_spec_batch=magnitude.numel(),
-            stride_spec_bin=magnitude.stride(0),
-            stride_spec_frame=magnitude.stride(1),
-            stride_out_batch=chroma_out.stride(0),
-            stride_out_chr=chroma_out.stride(1),
-            stride_out_frame=chroma_out.stride(2)
-        )
-        chroma_summary = [round(val, 4) for val in chroma_out[0].mean(dim=1).tolist()]
-
-        # 4. Izračunavanje Mel-spektrograma preko Triton kernela
-        num_mels = 64
-        mel_filters = torch.randn((num_mels, n_bins), device=waveform.device, dtype=torch.float32).abs()
-        mel_filters /= mel_filters.sum(dim=1, keepdim=True) + 1e-6
-
-        mel_out = torch.zeros((1, num_mels, num_frames), device=waveform.device, dtype=torch.float32)
-        grid_mel = lambda meta: (
-            triton.cdiv(num_mels, meta['BLOCK_SIZE_M']),
-            triton.cdiv(num_frames, meta['BLOCK_SIZE_N']),
-            1
-        )
-        triton_mel_kernel[grid_mel](
-            magnitude.unsqueeze(0),
-            mel_filters,
-            mel_out,
-            num_bins=n_bins,
-            num_mels=num_mels,
-            num_frames=num_frames,
-            stride_spec_batch=magnitude.numel(),
-            stride_spec_bin=magnitude.stride(0),
-            stride_spec_frame=magnitude.stride(1),
-            stride_out_batch=mel_out.stride(0),
-            stride_out_mel=mel_out.stride(1),
-            stride_out_frame=mel_out.stride(2)
-        )
-        average_log_mel = mel_out.mean().item()
-
-        # Placeholder za izlazni skalar koji će kasnije definisati neuronska mreža
-        output_scalar = 0.5000
-
-        result_dict = {
-            "agent": "audio",
-            "status": "completed",
-            "device": self.device,
-            "bench": bench,
-            "output_scalar": output_scalar,
-            "audio": {
-                "sample_rate": sample_rate,
-                "channels": channels,
-                "samples": samples,
-                "duration_sec": round(duration, 2),
-                "rms_metrics": {
-                    "rms_frames_count": rms_frames_count,
-                    "average_rms": round(average_rms, 4),
-                    "peak_rms": round(peak_rms, 4),
-                    "peak_second": peak_second,
-                    "energy_profile_sample": energy_profile_sample
-                },
-                "spectral_centroid_metrics": {
-                    "centroid_frames_count": num_frames,
-                    "average_centroid_hz": round(average_centroid, 2),
-                    "peak_centroid_hz": round(peak_centroid, 2),
-                    "centroid_profile_sample": centroid_profile_sample
-                },
-                "chroma_metrics": {
-                    "chroma_bins": 12,
-                    "chroma_mean_distribution": chroma_summary
-                },
-                "mel_metrics": {
-                    "num_mels": num_mels,
-                    "average_log_mel": round(average_log_mel, 4)
-                }
-            }
-        }
-
-        return json.dumps(result_dict, indent=4)
+    def process(self, file_path: str) -> str:
+        """
+        Full end-to-end execution pipeline combining audio DSP, deep embeddings, and LLM market report.
+        """
+        audio_data = self.process_audio_file(file_path)
+        audio_detail_analysis = self.get_ai_analysis(audio_data)
+        resnet_vector = self.extract_features(file_path)
+        return self.get_data(audio_data, audio_detail_analysis, resnet_vector)
 
 
 if __name__ == "__main__":
     load_dotenv()
     file_path = os.getenv("AUDIO_FILE_PATH", "")
     agent = AudioAgent()
-    if file_path:
-        json_result = agent.process_audio_file(file_path)
-        print(json_result)
+
+    if file_path and os.path.exists(file_path):
+        print("🚀 Starting full AudioAgent pipeline processing...")
+        result_json = agent.process(file_path)
+        data = json.loads(result_json)
+        print("✅ Pipeline executed successfully!")
+        print(data)
     else:
-        print("❌ AUDIO_FILE_PATH nije definisan u .env fajlu.")
+        print("❌ AUDIO_FILE_PATH isn't defined or file doesn't exist in .env.")
