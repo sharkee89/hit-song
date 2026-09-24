@@ -100,21 +100,22 @@ def main():
         score_tensor = model(x)
         raw_score = score_tensor.item()
 
-    acoustic_score = calibrate_score(raw_score, min_val=0.25, max_val=0.65)
+    # acoustic_score = calibrate_score(raw_score, min_val=0.25, max_val=0.65)
+
 
     print("\n" + "=" * 45)
     print(f" REZULTAT AUDIO AGENTA (LAKMUS PAPIR)")
     print("=" * 45)
     print(f" Fajl: {Path(audio_source).name}")
     print(f" Sirovi skor modela:   {raw_score:.4f}")
-    print(f" Kalibrisani skor:     {acoustic_score:.4f} (Raspon: 0.0 - 1.0)")
-
-    if acoustic_score > 0.6:
-        print(" Status: Visok standard produkcije / Komercijalni profil.")
-    elif acoustic_score > 0.4:
-        print(" Status: Prosečna produkcija / Granični kvalitet.")
-    else:
-        print(" Status: Amaterski snimak / Nizak akustični kvalitet.")
+    # print(f" Kalibrisani skor:     {acoustic_score:.4f} (Raspon: 0.0 - 1.0)")
+    #
+    # if acoustic_score > 0.6:
+    #     print(" Status: Visok standard produkcije / Komercijalni profil.")
+    # elif acoustic_score > 0.4:
+    #     print(" Status: Prosečna produkcija / Granični kvalitet.")
+    # else:
+    #     print(" Status: Amaterski snimak / Nizak akustični kvalitet.")
     print("=" * 45 + "\n")
 
 
