@@ -54,5 +54,7 @@ data/testing_songs
 data/old/
 data/processed/
 data/dataset/
+data/test/
+data/models/
 *.joblib
 joblib/
