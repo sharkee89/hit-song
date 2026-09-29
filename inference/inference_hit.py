@@ -9,7 +9,7 @@ from audio.utils.audio_utils import get_librosa_data
 load_dotenv()
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-def get_ai_analysis(features_str: str) -> str:
+def get_ai_analysis(features_str: str) -> dict:
     prompt = (
         f"You are a top music producer, analyst, and A&R expert for Spotify. "
         f"Analyze the potential of the song but based on audio features to become a hit based on the following information:\n"
