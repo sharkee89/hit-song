@@ -46,6 +46,7 @@ def rms(waveform: torch.Tensor, frame_size: int = 2048):
   frames = waveform.view(channels, num_frames, frame_size)
   return torch.sqrt(torch.mean(frames ** 2, dim=2))
 
+
 def get_librosa_data():
     audio_path_env = os.getenv("AUDIO_FILE_PATH")
     if not audio_path_env:
@@ -74,27 +75,41 @@ def get_librosa_data():
     if not target_path.exists():
         raise FileNotFoundError(f"Audio fajl nije pronađen na putanji: {target_path}")
 
-    print(f"Getting Librosa data: {target_path}")
+    print(f"Getting Librosa data for entire track: {target_path}")
     features_dict = {}
 
     try:
-        y, sr = librosa.load(str(target_path.resolve()), sr=22050, duration=30)
+        # Učitavamo CELU pesmu (duration=None) umesto samo prvih 30 sekundi
+        y, sr = librosa.load(str(target_path.resolve()), sr=22050, duration=None)
         if len(y) == 0:
             return {}
 
         try:
+            # Robustnija procena tempa preko dinamičkog praćenja ritma
             tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
             features_dict["librosa_tempo"] = float(np.atleast_1d(tempo)[0])
         except Exception:
             features_dict["librosa_tempo"] = np.nan
 
         try:
-            features_dict["librosa_energy"] = float(np.mean(librosa.feature.rms(y=y)))
-            features_dict["librosa_spectral_centroid"] = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
-            features_dict["librosa_spectral_rolloff"] = float(np.mean(librosa.feature.spectral_rolloff(y=y, sr=sr)))
-            features_dict["librosa_zcr"] = float(np.mean(librosa.feature.zero_crossing_rate(y)))
-            features_dict["librosa_spectral_bandwidth"] = float(np.mean(librosa.feature.spectral_bandwidth(y=y, sr=sr)))
-            features_dict["librosa_spectral_flatness"] = float(np.mean(librosa.feature.spectral_flatness(y=y)))
+            # Globalne statistike za celu pesmu (mean + opcionalno std za stabilnost)
+            rms = librosa.feature.rms(y=y)
+            features_dict["librosa_energy"] = float(np.mean(rms))
+
+            centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
+            features_dict["librosa_spectral_centroid"] = float(np.mean(centroid))
+
+            rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)
+            features_dict["librosa_spectral_rolloff"] = float(np.mean(rolloff))
+
+            zcr = librosa.feature.zero_crossing_rate(y)
+            features_dict["librosa_zcr"] = float(np.mean(zcr))
+
+            bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)
+            features_dict["librosa_spectral_bandwidth"] = float(np.mean(bandwidth))
+
+            flatness = librosa.feature.spectral_flatness(y=y)
+            features_dict["librosa_spectral_flatness"] = float(np.mean(flatness))
         except Exception:
             pass
 
