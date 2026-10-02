@@ -42,6 +42,7 @@ def get_ai_analysis(features_str: str, audio_file_path: str = None) -> dict:
         f"   - Commercial and streaming potential.\n"
         f"   - Most accurate genre and playlist fit.\n"
         f"   - Market placement and target audience.\n"
+        f"   - Quality of audio.\n"
         f"   - Actionable production or mixing advice.\n"
     )
     print(prompt)

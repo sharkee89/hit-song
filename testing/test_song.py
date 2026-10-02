@@ -6,7 +6,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
 sys.path.append(root_dir)
 
-from neural.neural_orchestrator import NeuralOrchestrator
+from neural.old.neural_orchestrator import NeuralOrchestrator
 
 
 def run_test():

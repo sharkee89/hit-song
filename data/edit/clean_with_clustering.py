@@ -17,8 +17,6 @@ CURRENT_DIR = Path(__file__).resolve().parent
 CSV_PATH = (
     CURRENT_DIR.parent
     / "dataset"
-    / "SpotGenTrack"
-    / "Data_Sources"
     / "spotify_tracks.csv"
 )
 OUTPUT_PATH = CURRENT_DIR / "spotify_tracks_clean.csv"

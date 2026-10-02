@@ -1,7 +1,6 @@
 import sys
 import os
 import numpy as np
-import torch # Moramo ga uvesti da bismo radili sa tenzorima
 
 # Adding parent directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -9,7 +8,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 # Importing the Orchestrator
-from neural.neural_orchestrator import NeuralOrchestrator
+from neural.old.neural_orchestrator import NeuralOrchestrator
 
 def start():
     # Initialization
