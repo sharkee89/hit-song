@@ -9,7 +9,7 @@ from audiobox_aesthetics.infer import initialize_predictor
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATASET_PATH = PROJECT_ROOT / "dataset" / "spotify_tracks_all.parquet"
+DATASET_PATH = PROJECT_ROOT / "dataset" / "spotify_tracks_clean.csv"
 OUTPUT_DATASET_PATH = PROJECT_ROOT / "dataset" / "spotify_tracks_audiobox.parquet"
 TEMP_AUDIO_PATH = PROJECT_ROOT / "test" / "temp_preview.mp3"
 

@@ -137,9 +137,32 @@ def get_ai_analysis(features_str: str, audio_file_path: str = None, artist_name:
         f"     For every json property give two fields, numeric value that is a value in number format from 0 to 100 and analysis that is descriptive. Value for possible improvements should be higher if demand for improvements are lower and vice versa.\n"
     )
 
-    deep_seek_analysis = Deepseek().get_analysis(prompt)
+    # 1. Poziv Gemini modela
     gemini_analysis = Gemini().get_analysis(prompt, audio_file_path=audio_file_path)
-    gpt_analysis = Gpt().get_analysis(prompt)
+
+    # USLOV: Ako Gemini padne/vrati grešku, prekidamo izvršavanje da ne trošimo tokene na GPT i DeepSeek
+    if gemini_analysis.startswith("Error communicating"):
+        return {
+            "error": "Gemini API call failed. Aborting subsequent AI agent calls to save tokens.",
+            "gemini": gemini_analysis,
+            "gpt": None,
+            "deep_seek": None
+        }
+
+    # 2. Poziv GPT modela (izvršava se samo ako je Gemini uspešan)
+    gpt_analysis = Gpt().get_analysis(prompt, audio_file_path=audio_file_path)
+
+    # Opciono: Možeš dodati proveru i za GPT ukoliko želiš, mada je Gemini prvi u lancu.
+    if gpt_analysis.startswith("Error communicating"):
+        return {
+            "error": "GPT API call failed.",
+            "gemini": gemini_analysis,
+            "gpt": gpt_analysis,
+            "deep_seek": None
+        }
+
+    # 3. Poziv DeepSeek meta-arbitraže
+    deep_seek_analysis = Deepseek().get_analysis(gemini_analysis, gpt_analysis)
 
     return {
         "deep_seek": deep_seek_analysis,

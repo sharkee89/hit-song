@@ -11,7 +11,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DATASET_PATH = PROJECT_ROOT / "data" / "dataset" / "spotify_tracks_audiobox.parquet"
-OUTPUT_DATASET_PATH = PROJECT_ROOT / "data" / "dataset" / "spotify_tracks_audiobox_librosa.parquet"
+OUTPUT_DATASET_PATH = PROJECT_ROOT / "data" / "dataset" / "spotify_tracks_audiobox_librosa_2.parquet"
 TEMP_AUDIO_PATH = PROJECT_ROOT / "data" / "test" / "temp_preview_librosa.mp3"
 
 
