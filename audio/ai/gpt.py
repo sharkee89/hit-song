@@ -10,7 +10,7 @@ class Gpt:
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     def get_analysis(self, prompt: str) -> str:
-        # return("gpt example analysis")
+        return("gpt example analysis")
         try:
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",

@@ -86,7 +86,7 @@ def main():
         raise FileNotFoundError(f"Dataset nije pronađen na putanji: {DATASET_PATH}")
 
     print(f"Učitavam dataset: {DATASET_PATH}")
-    df = pd.read_parquet(DATASET_PATH).head(12000)
+    df = pd.read_parquet(DATASET_PATH)
 
     # Generišemo listu svih kolona
     base_cols = [

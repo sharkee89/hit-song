@@ -16,9 +16,9 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-# Prebacili smo putanju na fajl koji sadrži i Librosa i CLAP podatke
+# Vraćeno na dataset bez CLAP kolona
 DATASET_PATH = (
-        PROJECT_ROOT / "data" / "dataset" / "spotify_tracks_audiobox_librosa_clap.parquet"
+        PROJECT_ROOT / "data" / "dataset" / "spotify_tracks_audiobox_librosa.parquet"
 )
 
 
@@ -26,7 +26,7 @@ def main():
     if not DATASET_PATH.exists():
         raise FileNotFoundError(f"Dataset nije pronađen na putanji: {DATASET_PATH}")
 
-    print(f"Učitavam obogaćeni dataset (Librosa + CLAP): {DATASET_PATH}")
+    print(f"Učitavam dataset (Librosa + Audiobox): {DATASET_PATH}")
     df = pd.read_parquet(DATASET_PATH)
 
     # 1. Osnovne metapodatke i popularnost izvođača / pratioce
@@ -39,39 +39,18 @@ def main():
         "followers",
     ]
 
-    # 2. Dinamički hvatamo sve librosa kolone
+    # 2. Dinamički hvatamo sve librosa kolone iz dataseta
     librosa_features = [col for col in df.columns if col.startswith("librosa_")]
 
-    # 3. Pripremamo CLAP embedding kolone (ekstrahujemo 512 dimenzija iz liste/niza)
-    print("Parsiram CLAP vektore iz dataseta...")
-    # Proveravamo kako su sačuvani (pretvaramo svaki red u numpy niz)
-    clap_matrix = np.array(df["clap_embedding"].tolist(), dtype=np.float32)
-
-    # Ako ima NaN vrednosti u CLAP-u, zamenjujemo ih nulama
-    clap_matrix = np.nan_to_num(clap_matrix, nan=0.0)
-
-    # Kreiramo imena za 512 CLAP kolona
-    clap_feature_names = [f"clap_{i + 1}" for i in range(clap_matrix.shape[1])]
-
-    # Spajamo osnovne i librosa karakteristike u DataFrame radi lakšeg čišćenja
-    feature_df = df[base_features + librosa_features].copy()
-
-    # Dodajemo CLAP dimenzije kao posebne kolone
-    for i, col_name in enumerate(clap_feature_names):
-        feature_df[col_name] = clap_matrix[:, i]
-
+    feature_cols = base_features + librosa_features
     target_col = "popularity"
-    feature_df[target_col] = df[target_col]
 
-    all_feature_cols = base_features + librosa_features + clap_feature_names
-
-    print(f"Ukupno ulaznih obeležja (features) za treniranje: {len(all_feature_cols)}")
+    print(f"Ukupno ulaznih obeležja (features) za treniranje: {len(feature_cols)}")
     print(f"  - Metapodaci i artist info: {len(base_features)}")
     print(f"  - Librosa audio obeležja: {len(librosa_features)}")
-    print(f"  - CLAP embedding obeležja: {len(clap_feature_names)}")
 
     # Čistimo dataset od NaN vrednosti
-    df_clean = feature_df.dropna(subset=all_feature_cols + [target_col]).copy()
+    df_clean = df.dropna(subset=feature_cols + [target_col]).copy()
     print(f"Broj validnih pesama za trening nakon čišćenja: {len(df_clean)}")
 
     if len(df_clean) < 100:
@@ -80,11 +59,11 @@ def main():
             "popunjeni."
         )
 
-    X = df_clean[all_feature_cols].values.astype(np.float32)
+    X = df_clean[feature_cols].values.astype(np.float32)
     y = df_clean[target_col].values.astype(np.float32)
 
     # Log transformacija za pratioce (koji su obično na velikoj skali)
-    followers_idx = all_feature_cols.index("followers")
+    followers_idx = feature_cols.index("followers")
     X[:, followers_idx] = np.log1p(X[:, followers_idx])
 
     # Delimo podatke (isti split za sve modele)
@@ -149,28 +128,28 @@ def main():
     # ==========================================
     # 3. MLP (Naša neuronska mreža)
     # ==========================================
-    print("\n[3/4] Treniram MLP Neural Network (sa CLAP ulazima)...")
+    print("\n[3/4] Treniram MLP Neural Network...")
 
     class HitPredictorMLP(nn.Module):
 
         def __init__(self, input_dim):
             super().__init__()
             self.network = nn.Sequential(
-                nn.Linear(input_dim, 256),  # Veći kapacitet zbog CLAP-a (512+ dimenzija)
+                nn.Linear(input_dim, 128),
                 nn.ReLU(),
                 nn.Dropout(0.3),
-                nn.Linear(256, 128),
-                nn.ReLU(),
-                nn.Dropout(0.2),
                 nn.Linear(128, 64),
                 nn.ReLU(),
-                nn.Linear(64, 1),
+                nn.Dropout(0.2),
+                nn.Linear(64, 32),
+                nn.ReLU(),
+                nn.Linear(32, 1),
             )
 
         def forward(self, x):
             return self.network(x)
 
-    mlp_model = HitPredictorMLP(input_dim=len(all_feature_cols)).to(device)
+    mlp_model = HitPredictorMLP(input_dim=len(feature_cols)).to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(mlp_model.parameters(), lr=0.0005)
 
@@ -195,21 +174,21 @@ def main():
     # ==========================================
     # 4. TABULAR TRANSFORMER (Self-Attention za tabele)
     # ==========================================
-    print("\n[4/4] Treniram Tabular Transformer (sa CLAP ulazima)...")
+    print("\n[4/4] Treniram Tabular Transformer...")
 
     class TabularTransformer(nn.Module):
 
-        def __init__(self, input_dim, d_model=128):
+        def __init__(self, input_dim, d_model=64):
             super().__init__()
             self.embed = nn.Linear(input_dim, d_model)
             self.attention = nn.MultiheadAttention(
                 embed_dim=d_model, num_heads=4, batch_first=True
             )
             self.fc = nn.Sequential(
-                nn.Linear(d_model, 64),
+                nn.Linear(d_model, 32),
                 nn.ReLU(),
                 nn.Dropout(0.2),
-                nn.Linear(64, 1),
+                nn.Linear(32, 1),
             )
 
         def forward(self, x):
@@ -218,7 +197,7 @@ def main():
             h = attn_out.squeeze(1)
             return self.fc(h)
 
-    trans_model = TabularTransformer(input_dim=len(all_feature_cols)).to(device)
+    trans_model = TabularTransformer(input_dim=len(feature_cols)).to(device)
     optimizer_trans = optim.Adam(trans_model.parameters(), lr=0.0005)
 
     trans_model.train()

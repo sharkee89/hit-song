@@ -15,8 +15,6 @@ PROJECT_ROOT = os.path.dirname(
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from audio.ai.ai_engine import AIEngine
-
 
 class TalentAgent:
 
@@ -45,8 +43,6 @@ class TalentAgent:
                 base_dir,
                 "data",
                 "dataset",
-                "SpotGenTrack",
-                "Data_Sources",
                 "spotify_artists.csv",
             )
 
@@ -156,23 +152,15 @@ class TalentAgent:
                 }
 
         # 2. Query MusicBrainz API
-        # mb_data = self._fetch_musicbrainz_data(talent_name)
+        mb_data = self._fetch_musicbrainz_data(talent_name)
 
         # 3. Consolidate Results
         return {
             "name": talent_name,
             "found": spotify_data.get("found", False),
             "spotify_data": spotify_data,
-            # "musicbrainz_data": mb_data,
+            "musicbrainz_data": mb_data,
         }
-
-    def get_ai_analysis(self, talent_data: dict) -> str:
-        """Passes aggregated talent metadata to AIEngine for market profile report."""
-        ai_engine = AIEngine()
-        # Fallback if specific talent method isn't implemented on AIEngine yet
-        if hasattr(ai_engine, "get_talent_detail_analysis"):
-            return ai_engine.get_talent_detail_analysis(talent_data)
-        return "AI analysis engine pending integration."
 
     def get_feature_vector(self, talent_data: dict) -> torch.Tensor:
         """Extracts a normalized, flat numerical tensor for ML model fusion."""
@@ -205,8 +193,6 @@ class TalentAgent:
     def process(self, talent_name: str) -> str:
         """Full end-to-end execution pipeline for TalentAgent."""
         talent_data = self.fetch_talent_data(talent_name)
-        ai_analysis = self.get_ai_analysis(talent_data)
-        talent_data["ai_analysis"] = ai_analysis
 
         return json.dumps(talent_data, indent=4)
 

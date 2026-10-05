@@ -18,7 +18,7 @@ def main():
     if not DATASET_PATH.exists():
         raise FileNotFoundError(f"Dataset nije pronađen na putanji: {DATASET_PATH}")
 
-    print(f"Učitavam obogaćeni dataset sa Librosa podacima: {DATASET_PATH}")
+    print(f"Učitavam dataset sa Librosa obeležjima: {DATASET_PATH}")
     df = pd.read_parquet(DATASET_PATH)
 
     # 1. Osnovne karakteristike i metapodaci
@@ -35,6 +35,9 @@ def main():
     # Čistimo dataset od redova koji imaju NaN vrednosti
     df_clean = df.dropna(subset=feature_cols + [target_col]).copy()
     print(f"Broj validnih pesama za trening nakon čišćenja: {len(df_clean)}")
+
+    if len(df_clean) < 100:
+        print("Upozorenje: Mali broj pesama nakon čišćenja. Proveri da li su podaci popunjeni.")
 
     # Izdvajamo X i y
     X = df_clean[feature_cols].values.astype(np.float32)
@@ -65,7 +68,7 @@ def main():
         device="cuda"
     )
 
-    # Definišemo prostor pretrage da probamo da izvučemo maksimum
+    # Definišemo prostor pretrage za fino podešavanje
     param_grid = {
         'n_estimators': [150, 250],
         'learning_rate': [0.03, 0.05, 0.1],
@@ -74,7 +77,7 @@ def main():
         'colsample_bytree': [0.8, 1.0]
     }
 
-    grid_search = estimator = GridSearchCV(
+    grid_search = GridSearchCV(
         estimator=base_model,
         param_grid=param_grid,
         scoring='r2',
@@ -113,7 +116,7 @@ def main():
 
     print(feature_importance_df.head(10).to_string(index=False))
 
-    # Čuvanje modela, skalera i liste feature-a
+    # Čuvanje modela, skalera i liste feature-a za produkciju
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
     with open(MODEL_DIR / "xgboost_audio_model.pkl", "wb") as f:
