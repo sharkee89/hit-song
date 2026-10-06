@@ -21,7 +21,7 @@ class Gemini:
                 contents.append(uploaded_file)
 
             response = self.client.models.generate_content(
-                model="gemini-3.6-flash",
+                model="gemini-3.5-flash",
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction="You are an expert in the music industry and hit prediction.",

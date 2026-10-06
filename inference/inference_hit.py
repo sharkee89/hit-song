@@ -14,7 +14,7 @@ from audio.agent.talent.talent_agent import TalentAgent
 load_dotenv()
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_DIR = PROJECT_ROOT / "hit-song" / "data" / "models"
 
 
@@ -25,6 +25,7 @@ def predict_xgboost_popularity(librosa_features: dict, artist_name: str) -> dict
     i vraća predviđenu popularnost.
     """
     model_path = MODEL_DIR / "xgboost_audio_model.pkl"
+    print(model_path)
     scaler_path = MODEL_DIR / "feature_scaler.pkl"
     cols_path = MODEL_DIR / "feature_cols.pkl"
 
@@ -117,10 +118,8 @@ def get_ai_analysis(features_str: str, audio_file_path: str = None, artist_name:
         f"this is data found for artist {talent_data}"
         f"Give detail analysis how artist and its genre is tied to the new song"
         f"Give detail analysis of production and audio quality of a file"
-        f"Guidelines for a balanced, genre-agnostic analysis:\n"
-        f"1. Contextualize the metrics and actual sound: Compare what you hear and the track's features against the appropriate genre baseline above.\n"
-        f"2. Evaluate objectively: Do not penalize a track solely for moderate energy or specific spectral values if it sounds great and fits its target market.\n"
-        f"3. Provide a detailed, professional assessment covering:\n"
+        f"Evaluate objectively: Do not penalize a track solely for moderate energy or specific spectral values if it sounds great and fits its target market.\n"
+        f"Provide a detailed, professional assessment covering:\n"
         f"   - Commercial and streaming potential.\n"
         f"   - Most accurate genre and playlist fit.\n"
         f"   - Market placement and target audience.\n"
@@ -128,11 +127,12 @@ def get_ai_analysis(features_str: str, audio_file_path: str = None, artist_name:
         f"   - Actionable production or mixing advice.\n"
         f"   - \n"
         f"   - All output format in a json response that is having following properties: \n"
+        f"     prediction grade.\n"
         f"     production quality,\n"
         f"     audio quality,\n"
-        f"     prediction_detail_analysis,\n"
+        f"     genre placement,\n"
         f"     possible_improvements,\n"
-        f"     prediction grade.\n"
+        f"     analysis,\n"
         f"     \n"
         f"     For every json property give two fields, numeric value that is a value in number format from 0 to 100 and analysis that is descriptive. Value for possible improvements should be higher if demand for improvements are lower and vice versa.\n"
     )
