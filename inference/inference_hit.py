@@ -4,21 +4,22 @@ from pathlib import Path
 import pickle
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 from dotenv import load_dotenv
 from audio.ai.deepseek import Deepseek
 from audio.ai.gemini import Gemini
 from audio.ai.gpt import Gpt
-from audio.utils.audio_utils import get_librosa_data
+from audio.utils.audio_utils import extract_peak_window, get_audiobox_data, get_librosa_data
 from audio.agent.talent.talent_agent import TalentAgent
 
 load_dotenv()
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_DIR = PROJECT_ROOT / "hit-song" / "data" / "models"
+MODEL_DIR = PROJECT_ROOT / "data" / "models"
 
 
-def predict_xgboost_popularity(librosa_features: dict, artist_name: str) -> dict:
+def predict_xgboost_popularity(librosa_features: dict, artist_name: str, audiobox_features: dict = None) -> dict:
     """
     Učitava sačuvani XGBoost model, skaler i listu obeležja,
     povlači podatke o izvođaču preko TalentAgent-a, priprema podatke
@@ -46,8 +47,8 @@ def predict_xgboost_popularity(librosa_features: dict, artist_name: str) -> dict
     # Kreiramo rečnik sa podrazumevanim vrednostima
     row_data = {col: 0.0 for col in feature_cols}
 
-    # Popunjavamo librosa karakteristike
-    for k, v in librosa_features.items():
+    # Popunjavamo librosa i Audiobox (PQ, PC, CE, CU) karakteristike
+    for k, v in {**librosa_features, **(audiobox_features or {})}.items():
         if k in row_data:
             row_data[k] = float(v) if v is not None else 0.0
 
@@ -79,13 +80,21 @@ def predict_xgboost_popularity(librosa_features: dict, artist_name: str) -> dict
     # Skaliranje
     x_scaled = scaler.transform(x_input)
 
-    # Predikcija
+    # Predikcija (CPU je dovoljan za jedan red i ne zahteva GPU na mašini za demo)
+    model.set_params(device="cpu")
     predicted_popularity = float(model.predict(x_scaled)[0])
+
+    # Doprinos svakog obeležja predikciji (SHAP vrednosti ugrađene u XGBoost)
+    contribs = model.get_booster().predict(xgb.DMatrix(x_scaled), pred_contribs=True)[0]
+    feature_contributions = {col: float(c) for col, c in zip(feature_cols, contribs[:-1])}
 
     return {
         "predicted_popularity": round(predicted_popularity, 2),
         "artist_name": artist_name,
-        "talent_data_used": talent_data
+        "talent_data_used": talent_data,
+        "model_inputs": row_data,
+        "feature_contributions": feature_contributions,
+        "base_value": float(contribs[-1]),
     }
 
 
@@ -180,15 +189,20 @@ def main():
     if not audio_file_path or not os.path.exists(audio_file_path):
         print(f"Upozorenje: AUDIO_FILE_PATH nije pronađen ili fajl ne postoji: {audio_file_path}")
 
-    # 1. Ekstrakcija librosa karakteristika za novu pesmu
-    audio_data = get_librosa_data()
+    # 1. 30s prozor najveće energije (model je treniran na 30s preview snimcima)
+    window_path = str(PROJECT_ROOT / "extracted_30s_window.wav")
+    extract_peak_window(audio_file_path, window_path)
 
-    # 2. XGBoost predikcija sa stvarnim podacima iz TalentAgent-a
-    xgboost_prediction = predict_xgboost_popularity(audio_data, artist_name=artist_name)
+    # 2. Ekstrakcija librosa i Audiobox karakteristika za novu pesmu
+    audio_data = get_librosa_data(window_path)
+    audiobox_data = get_audiobox_data(window_path)
+
+    # 3. XGBoost predikcija sa stvarnim podacima iz TalentAgent-a
+    xgboost_prediction = predict_xgboost_popularity(audio_data, artist_name=artist_name, audiobox_features=audiobox_data)
     artist_name_used = xgboost_prediction.get("artist_name", artist_name)
     talent_data_used = xgboost_prediction.get("talent_data_used", {})
 
-    # 3. LLM AI analize
+    # 4. LLM AI analize
     ai_analysis = get_ai_analysis(str(audio_data), audio_file_path=audio_file_path, artist_name=artist_name_used, talent_data=talent_data_used)
 
     # Kombinovani podaci

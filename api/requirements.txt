@@ -1,0 +1,5 @@
+# Dodatne zavisnosti za HTTP API (pored postojećih: xgboost, librosa, audiobox_aesthetics, openai, google-genai ...)
+fastapi
+uvicorn[standard]
+python-multipart
+truststore

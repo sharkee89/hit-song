@@ -35,7 +35,7 @@ class Gpt:
                         "type": "input_audio",
                         "input_audio": {
                             "data": audio_base64,
-                            "format": "mp3"
+                            "format": "wav" if audio_file_path.lower().endswith(".wav") else "mp3"
                         }
                     }
                 )

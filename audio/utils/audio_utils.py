@@ -47,8 +47,36 @@ def rms(waveform: torch.Tensor, frame_size: int = 2048):
   return torch.sqrt(torch.mean(frames ** 2, dim=2))
 
 
-def get_librosa_data():
-    audio_path_env = os.getenv("AUDIO_FILE_PATH")
+def extract_peak_window(source_path: str, output_path: str, duration: float = 30.0) -> dict:
+    """
+    Izdvaja 30-sekundni prozor sa najvećom RMS energijom (isti pristup kao u
+    testing/test_audio_agent.py) kako bi ulaz odgovarao 30s Spotify preview
+    snimcima na kojima su trenirani XGBoost, Audiobox i Librosa obeležja.
+    """
+    y, sr = librosa.load(source_path, sr=None, mono=True)
+    total_duration = len(y) / sr
+    target_samples = int(duration * sr)
+
+    start_sample = 0
+    if len(y) > target_samples:
+        rms_frames = librosa.feature.rms(y=y, frame_length=2048, hop_length=sr)[0]
+        window = int(duration)
+        n_windows = (len(y) - target_samples) // sr + 1
+        window_means = [np.mean(rms_frames[i:i + window]) for i in range(n_windows)]
+        start_sample = int(np.argmax(window_means)) * sr
+
+    segment = y[start_sample:start_sample + target_samples]
+    sf.write(output_path, segment, sr)
+
+    return {
+        "start_sec": round(start_sample / sr, 2),
+        "end_sec": round((start_sample + len(segment)) / sr, 2),
+        "total_duration_sec": round(total_duration, 2),
+    }
+
+
+def get_librosa_data(audio_path: str = None):
+    audio_path_env = audio_path or os.getenv("AUDIO_FILE_PATH")
     if not audio_path_env:
         raise ValueError("Error: AUDIO_FILE_PATH not found in .env file!")
     audio_path = Path(audio_path_env)
@@ -136,3 +164,20 @@ def get_librosa_data():
         target_path.unlink()
 
     return features_dict
+
+_AUDIOBOX_PREDICTOR = None
+
+
+def get_audiobox_data(audio_path: str) -> dict:
+    """
+    Meta Audiobox Aesthetics ocene (PQ, PC, CE, CU) - isti model koji je korišćen
+    u data/edit/build_audiobox_dataset.py za kreiranje trening skupa.
+    """
+    global _AUDIOBOX_PREDICTOR
+    if _AUDIOBOX_PREDICTOR is None:
+        from audiobox_aesthetics.infer import initialize_predictor
+        _AUDIOBOX_PREDICTOR = initialize_predictor()
+
+    preds = _AUDIOBOX_PREDICTOR.forward([{"path": str(Path(audio_path).resolve())}])
+    res = preds[0] if preds else {}
+    return {k: float(res[k]) for k in ("PQ", "PC", "CE", "CU") if res.get(k) is not None}

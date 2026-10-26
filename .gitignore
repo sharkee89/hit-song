@@ -12,6 +12,7 @@ env/
 bin/
 node_modules/
 lib/
+!flutter_app/lib/
 develop-eggs/
 dist/
 eggs/
