@@ -3,7 +3,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import GroupShuffleSplit, GridSearchCV
 from sklearn.preprocessing import MinMaxScaler
 from xgboost import XGBRegressor
 
@@ -21,8 +21,11 @@ def main():
     print(f"Učitavam dataset sa Librosa obeležjima: {DATASET_PATH}")
     df = pd.read_parquet(DATASET_PATH)
 
-    # 1. Osnovne karakteristike i metapodaci
+    # 1. Osnovne karakteristike, metapodaci i kolona za grupisanje (izvođač)
     base_features = ["PQ", "PC", "CE", "CU", "artist_popularity", "followers"]
+
+    # Automatski prepoznajemo da li se kolona zove 'artist_name' ili 'artist_id'
+    artist_col = "artist_name" if "artist_name" in df.columns else "artist_id"
 
     # 2. Dinamički hvatamo sve librosa kolone iz dataseta
     librosa_features = [col for col in df.columns if col.startswith("librosa_")]
@@ -32,25 +35,31 @@ def main():
 
     print(f"Ukupno ulaznih obeležja (features): {len(feature_cols)}")
 
-    # Čistimo dataset od redova koji imaju NaN vrednosti
-    df_clean = df.dropna(subset=feature_cols + [target_col]).copy()
+    # Čistimo dataset od redova koji imaju NaN vrednosti (uključujući i kolonu za grupu)
+    cols_to_check = feature_cols + [target_col, artist_col]
+    df_clean = df.dropna(subset=cols_to_check).copy()
     print(f"Broj validnih pesama za trening nakon čišćenja: {len(df_clean)}")
 
     if len(df_clean) < 100:
         print("Upozorenje: Mali broj pesama nakon čišćenja. Proveri da li su podaci popunjeni.")
 
-    # Izdvajamo X i y
+    # Izdvajamo X, y i grupe (izvođače)
     X = df_clean[feature_cols].values.astype(np.float32)
     y = df_clean[target_col].values.astype(np.float32)
+    groups = df_clean[artist_col].values
 
     # Logaritamska transformacija za kolonu "followers"
     followers_idx = feature_cols.index("followers")
     X[:, followers_idx] = np.log1p(X[:, followers_idx])
 
-    # Delimo podatke na trening (80%) i test (20%) skup
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    # Deljenje podataka pomoću GroupShuffleSplit-a (sprečava Data Leakage po izvođačima)
+    gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+    train_idx, test_idx = next(gss.split(X, y, groups))
+
+    X_train, X_test = X[train_idx], X[test_idx]
+    y_train, y_test = y[train_idx], y[test_idx]
+
+    print(f"Trening skup: {len(X_train)} pesama | Test skup: {len(X_test)} pesama (razdvojeno po izvođačima)")
 
     # Skaliramo ulazne podatke pomoću MinMaxScaler-a na opseg [0, 1]
     scaler = MinMaxScaler()
@@ -68,7 +77,7 @@ def main():
         device="cuda"
     )
 
-    # Definišemo prostor pretrage za fino podešavanje
+    # Definišemo prostor pretrage sa ograničenjima da sprečimo overfitting
     param_grid = {
         'n_estimators': [150, 250],
         'learning_rate': [0.03, 0.05, 0.1],
@@ -102,6 +111,23 @@ def main():
     print("=" * 50)
     print(f"RMSE (Root Mean Squared Error): {rmse:.4f}")
     print(f"R² Score (Koeficijent determinacije): {r2:.4f}")
+    print("=" * 50)
+
+    # ==========================================
+    # STATISTIKA PREDIKCIJA (Opseg i kalibracija)
+    # ==========================================
+    print("\n" + "=" * 50)
+    print("ANALIZA OPSEGA PREDIKCIJA MODELA")
+    print("=" * 50)
+    print(
+        f"Stvarne vrednosti (y_test) -> Min: {y_test.min():.2f} | Max: {y_test.max():.2f} | Mean: {y_test.mean():.2f}")
+    print(
+        f"Predviđene vrednosti (y_pred) -> Min: {y_pred.min():.2f} | Max: {y_pred.max():.2f} | Mean: {y_pred.mean():.2f}")
+
+    # Prikaz prvih nekoliko poređenja stvarnih i predviđenih vrednosti
+    comparison_df = pd.DataFrame({'Stvarno': y_test[:5], 'Predviđeno': y_pred[:5]})
+    print("\nPrimeri prvih 5 predviđanja:")
+    print(comparison_df.to_string(index=False))
     print("=" * 50)
 
     # ==========================================

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hit Song Science - AI vs. AI Multi-Agent Consensus</title>
+    <title>Hit Song Science - AI vs. AI Multi-Agent Consensus Studio</title>
     <style>
         :root {
             --bg-color: #f8fafc;
@@ -27,24 +27,8 @@
         }
 
         .container {
-            max-width: 1100px;
+            max-width: 1200px;
             margin: 0 auto;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        header h1 {
-            margin: 0;
-            font-size: 2.2rem;
-            color: var(--primary);
-        }
-
-        header p {
-            color: var(--text-muted);
-            margin-top: 5px;
         }
 
         .card {
@@ -62,7 +46,7 @@
             margin-top: 15px;
         }
 
-        input[type="text"] {
+        select {
             flex: 1;
             padding: 12px 16px;
             border-radius: 8px;
@@ -133,7 +117,7 @@
 
         .models-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
             gap: 20px;
             margin-top: 20px;
         }
@@ -157,7 +141,6 @@
 
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
             margin-bottom: 20px;
         }
@@ -177,6 +160,34 @@
             margin-top: 4px;
         }
 
+        .dimensions-list {
+            font-size: 0.88rem;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .dimension-item {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            padding: 8px 10px;
+            border-radius: 6px;
+        }
+
+        .dimension-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 2px;
+        }
+
+        .dimension-desc {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
         .comparison-section {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -191,12 +202,8 @@
             border: 1px solid var(--border);
         }
 
-        .comparison-box h4 {
-            margin-top: 0;
-        }
-
-        .agreements-box h4 { color: var(--success); }
-        .disagreements-box h4 { color: var(--warning); }
+        .agreements-box h4 { color: var(--success); margin-top: 0; }
+        .disagreements-box h4 { color: var(--warning); margin-top: 0; }
 
         .consensus-box {
             background-color: #f0fdf4;
@@ -225,119 +232,215 @@
 <body>
 
 <div class="container">
-    <header>
-        <h1>Hit Song Science Studio</h1>
-        <p>Multi-Agent AI vs. AI Audio Analysis & Consensus Architecture</p>
-    </header>
 
     <!-- Input Control Card -->
     <div class="card">
-        <h3>Run Multi-Model Analysis Simulator</h3>
         <div class="input-group">
-            <input type="text" id="artist-input" placeholder="Artist (e.g., The Weeknd)" value="The Weeknd">
-            <input type="text" id="song-input" placeholder="Song Name (e.g., Blinding Lights)" value="Blinding Lights">
-            <button id="start-btn" onclick="startAnalysis()">Run AI Analysis</button>
+            <select id="song-select">
+                <option value="6ix9ine - WAKA">6ix9ine – WAKA</option>
+                <option value="Azet - Lelele">Azet – Lelele</option>
+                <option value="Charlie Puth - Done for Me">Charlie Puth – Done for Me (feat. Kehlani)</option>
+            </select>
+            <button id="start-btn" onclick="startAnalysis()">Run Batch Inference</button>
         </div>
 
         <!-- Progress Steps -->
         <div class="steps-container" id="steps-wrapper" style="display: none;">
             <div class="step" id="step-1">
                 <span class="step-icon">⏳</span>
-                <div><strong>Step 1:</strong> Audio feature extraction (Librosa + Metadata)</div>
+                <div><strong>Step 1:</strong> Audio Processing</div>
             </div>
             <div class="step" id="step-2">
                 <span class="step-icon">⏳</span>
-                <div><strong>Step 2:</strong> Parallel audio evaluation (Gemini, GPT-4o, and Qwen Audio processing JSON schemas)</div>
+                <div><strong>Step 2:</strong> Independent LLM Analysis</div>
             </div>
             <div class="step" id="step-3">
                 <span class="step-icon">⏳</span>
-                <div><strong>Step 3:</strong> Meta-arbitration and consensus synthesis (DeepSeek neutral text aggregation)</div>
+                <div><strong>Step 3:</strong> Detailed analysis</div>
             </div>
         </div>
     </div>
 
     <!-- Results Section -->
     <div class="card" id="results-section">
-        <h2>System Consensus Report</h2>
-        <p>Track: <strong id="res-song"></strong> — <span id="res-artist"></span></p>
+        <h2>Consensus & Evaluation Report</h2>
+        <p>Selected song: <strong id="res-song-name"></strong></p>
 
         <!-- Metrics Overview -->
         <div class="metrics-grid">
+            <div class="metric-box" style="display: none">
+                <div>Numerical Agreement</div>
+                <div class="metric-value" id="val-agreement">--</div>
+            </div>
             <div class="metric-box">
-                <div>Prediction Grade</div>
+                <div>XGBoost Prediction</div>
+                <div class="metric-value" id="val-xgb">--</div>
+            </div>
+            <div class="metric-box" style="display: none">
+                <div>Consensus Grade</div>
                 <div class="metric-value" id="val-grade">--</div>
-            </div>
-            <div class="metric-box">
-                <div>Production Quality</div>
-                <div class="metric-value" id="val-prod">--</div>
-            </div>
-            <div class="metric-box">
-                <div>Market Potential</div>
-                <div class="metric-value" id="val-market">--</div>
             </div>
         </div>
 
-        <h3>Individual Model Outputs (Audio Perception)</h3>
+        <h3>Independent LLM Expert Outputs (Multi-Dimensional Schema)</h3>
         <div class="models-grid">
             <!-- Gemini Output -->
             <div class="model-card">
-                <h4>Gemini <span>88 / A</span></h4>
-                <p><strong>Genre Fit:</strong> Synth-Pop / Dance-Pop</p>
-                <p><strong>Analysis:</strong> Bright high-frequency centroid (~2300 Hz) with high commercial polish. Exceptional hook execution and transient punch.</p>
+                <h4>Gemini</h4>
+                <div class="dimensions-list" id="gem-dims"></div>
             </div>
             <!-- GPT-4o Output -->
             <div class="model-card">
-                <h4>GPT-4o <span>86 / A-</span></h4>
-                <p><strong>Genre Fit:</strong> Synth-Pop / New Wave</p>
-                <p><strong>Analysis:</strong> Strong dynamic compression and radio-ready vocal placement. High structural familiarity that appeals directly to global streaming playlists.</p>
+                <h4>GPT-4o</h4>
+                <div class="dimensions-list" id="gpt-dims"></div>
             </div>
             <!-- Qwen Audio Output -->
             <div class="model-card">
-                <h4>Qwen Audio <span>85 / B+</span></h4>
-                <p><strong>Genre Fit:</strong> Commercial Pop</p>
-                <p><strong>Analysis:</strong> Solid rhythmic drive and steady tempo mapping. Low spectral flatness indicates clean instrumental separation, though minor bridge compression noted.</p>
+                <h4>Qwen Audio</h4>
+                <div class="dimensions-list" id="qwen-dims"></div>
             </div>
         </div>
 
         <!-- Agreements & Disagreements -->
         <div class="comparison-section">
             <div class="comparison-box agreements-box">
-                <h4>Model Agreements</h4>
-                <ul>
-                    <li>All three models unanimously highlight top-tier production polish and clean instrumental separation.</li>
-                    <li>Strong consensus on commercial target fit within global Synth-Pop and Dance-Pop charts.</li>
-                    <li>Aligned high ratings for rhythmic consistency and professional mix execution.</li>
+                <h4>Agreements</h4>
+                <ul id="res-agreements">
+                    <li>Loading agreements...</li>
                 </ul>
             </div>
             <div class="comparison-box disagreements-box">
-                <h4>Model Disagreements</h4>
-                <ul>
-                    <li><strong>Gemini vs Qwen:</strong> Minor variance on dynamic range scoring (Gemini rates high transparency, Qwen flags bridge compression).</li>
-                    <li>Subtle differences in sub-genre classification (New Wave revival vs pure Commercial Dance-Pop).</li>
+                <h4>Disagreements</h4>
+                <ul id="res-disagreements">
+                    <li>Loading disagreements...</li>
                 </ul>
             </div>
         </div>
 
         <!-- DeepSeek Final Consensus Report -->
         <div class="consensus-box">
-            <h3>DeepSeek Final Consensus Report (Arbitration)</h3>
-            <p id="res-analysis">Generating synthesis...</p>
+            <h3>Detailed Analysis & Meta-Arbitration</h3>
+            <p id="res-arbitration">Synthesizing insights...</p>
         </div>
     </div>
 </div>
 
 <script>
+    // Mock database with multi-dimensional granular analysis per model
+    const trackDatabase = {
+        "6ix9ine - WAKA": {
+            agreement: "80%",
+            xgb: "80 / A",
+            grade: "81 / A-",
+            gemini: {
+                audio: { score: "78/100", text: "Bright high-end with heavy limiting; trades dynamic range for competitive trap loudness." },
+                genre: { score: "88/100", text: "Bullseye placement in Aggressive Trap, Screamo Rap, and Drill editorial playlists." },
+                prod: { score: "82/100", text: "Strong dynamic contrast from melodic intro to explosive compressed vocal chain." },
+                imp: { score: "75/100", text: "Needs a sub-bass riser for intro transition and dynamic EQ on screams around 3-4 kHz." },
+                grade: { score: "72/100", text: "Capped by polarizing artist brand and heavy saturation, despite high playlist potency." }
+            },
+            gpt: {
+                audio: { score: "80/100", text: "Crisp top end and powerful low frequencies with room to tighten transient response." },
+                genre: { score: "90/100", text: "Aligns closely with RapCaviar and Get Turnt playlists using standard trap tempos." },
+                prod: { score: "78/100", text: "Solid hard-hitting beat, though mid-range vocal clarity needs minor refinements." },
+                imp: { score: "70/100", text: "Slight mid-range and vocal-stack clarity adjustments recommended for polish." },
+                grade: { score: "85/100", text: "Strong commercial upside driven by hook strength, ad-libs, and viral trend alignment." }
+            },
+            qwen: {
+                audio: { score: "79/100", text: "Balanced low-end sub presence with crisp transient separation on percussions." },
+                genre: { score: "89/100", text: "Fits modern hip-hop and aggressive streaming subsets effectively." },
+                prod: { score: "80/100", text: "Clean mix architecture competitive with mainstream commercial hip-hop releases." },
+                imp: { score: "72/100", text: "Minor limiting tweaks to preserve transient punch during intense drops." },
+                grade: { score: "80/100", text: "Balanced structural outlook combining niche potency with broad playlist reach." }
+            },
+            agreements: [
+                "Both Gemini and GPT recognize strong core-fanbase and high-energy playlist suitability.",
+                "Unanimous consensus on hard-hitting 808 sub-bass structure and mix clarity."
+            ],
+            disagreements: [
+                "Gemini weights artist brand polarization more heavily, resulting in a lower prediction grade (72 vs 85).",
+                "Slight variance in perceived vocal harshness control between models."
+            ],
+            arbitration: "DeepSeek arbitration reveals that while all models agree on the technical production and genre fit of the aggressive trap beat, the final prediction grade splits due to differing weighting of external risk factors. Gemini applies a penalty for the artist's polarizing public brand, whereas GPT focuses strictly on internal musical attributes like hook strength and short-form viral loops (TikTok/Reels). Synthesizing these perspectives yields a balanced institutional grade of 80/A."
+        },
+        "Azet - Lelele": {
+            agreement: "83.2%",
+            xgb: "83 / A",
+            grade: "82 / A-",
+            gemini: {
+                audio: { score: "90/100", text: "Pristine dynamic balance with deep, punchy low-end and clear treble response." },
+                genre: { score: "95/100", text: "Textbook European Deutschrap and Afro-trap crossover perfectly matched to 129 BPM." },
+                prod: { score: "92/100", text: "High perceptual energy with seamless transitions and signature vocal ad-lib layers." },
+                imp: { score: "87/100", text: "Essentially market-ready; minor stereo-width adjustments on chorus pads optional." },
+                grade: { score: "88/100", text: "Exceptionally high commercial potential for GSA and Balkan streaming markets." }
+            },
+            gpt: {
+                audio: { score: "75/100", text: "Clean spectral profile, though lower MFCC values point to understated bass warmth." },
+                genre: { score: "85/100", text: "Fits urban dance and German hip-hop playlists, though global crossover requires push." },
+                prod: { score: "72/100", text: "Clean vocals, but low measured energy (0.26) suggests need for dynamic punch." },
+                imp: { score: "65/100", text: "Needs harmonic saturation and low-end warmth enhancement to boost perceived loudness." },
+                grade: { score: "78/100", text: "Solid regional performance within niche cultural segments, constrained globally." }
+            },
+            qwen: {
+                audio: { score: "80/100", text: "Controlled zero-crossing transients and wide frequency dispersion across spectrum." },
+                genre: { score: "89/100", text: "Natural fit for modern European street-rap and club rotation lists." },
+                prod: { score: "79/100", text: "Competent mix execution with well-defined vocal presence over 808s." },
+                imp: { score: "70/100", text: "Moderate adjustments to drum punch and dynamic compression recommended." },
+                grade: { score: "80/100", text: "Strong streaming viability backed by established artist brand momentum." }
+            },
+            agreements: [
+                "Strong consensus on regional European streaming dominance and 129 BPM playlist fit.",
+                "Unanimous recognition of clear vocal articulation and street-rap delivery."
+            ],
+            disagreements: [
+                "Significant divide on how to interpret the low raw energy feature (0.26)—Gemini views it as dynamic headroom, GPT as a structural weakness."
+            ],
+            arbitration: "DeepSeek identifies this song as a fascinating case study where technical feature extraction (specifically a low raw energy score of 0.26) heavily influenced GPT to downgrade production and grade metrics. Conversely, Gemini evaluated perceptual energy and dynamic arrangement more favorably. DeepSeek's meta-arbitration bridges this gap by confirming that the track's stylistic choice of dynamic breathing room serves regional European streaming formats successfully, validating an overall grade of 82/A-."
+        },
+        "Charlie Puth - Done for Me": {
+            agreement: "87.7%",
+            xgb: "90 / A+",
+            grade: "91 / A+",
+            gemini: {
+                audio: { score: "97/100", text: "Dynamic conservation without over-compression; warm synth bass and bright top-end." },
+                genre: { score: "95/100", text: "Flawless intersection of Synth-Pop, Retro-Funk, and Contemporary R&B at 112 BPM." },
+                prod: { score: "98/100", text: "Masterclass in modern-retro pop production with micro-edited vocal stacks and wide imaging." },
+                imp: { score: "96/100", text: "Virtually flawless for its target market; requires no structural changes." },
+                grade: { score: "96/100", text: "Certified global hit with unmatched listener retention and evergreen streaming appeal." }
+            },
+            gpt: {
+                audio: { score: "90/100", text: "Excellent frequency utilization, competitive streaming loudness, and zero artifacts." },
+                genre: { score: "92/100", text: "Ideal commercial pop crossover profile matching top 40 radio expectations." },
+                prod: { score: "88/100", text: "Clean modern mix with forward vocals and balanced EQ/compression structure." },
+                imp: { score: "75/100", text: "Slight energy boost and low-end warmth enhancement could broaden dance-pop appeal." },
+                grade: { score: "85/100", text: "Strong commercial potential with high likelihood of major playlist inclusion." }
+            },
+            qwen: {
+                audio: { score: "92/100", text: "Pristine sibilant control and balanced stereo field across all frequency bands." },
+                genre: { score: "94/100", text: "Strong alignment with global pop, chill pop, and adult contemporary formats." },
+                prod: { score: "91/100", text: "Professional arrangement with seamless transitions and rich harmonic tonality." },
+                imp: { score: "82/100", text: "Minor harmonic saturation in the chorus could elevate dynamic impact further." },
+                grade: { score: "89/100", text: "High-tier market readiness backed by robust acoustic and vocal metrics." }
+            },
+            agreements: [
+                "Unanimously high marks for audio fidelity, sibilant control, and commercial pop readiness.",
+                "Consistent identification of the 112 BPM tempo as an optimal sweet spot for pop crossover."
+            ],
+            disagreements: [
+                "Gemini treats the track as an absolute gold standard with zero flaws (96/100), while GPT and Qwen suggest minor low-end warmth and energy enhancements (75-82/100)."
+            ],
+            arbitration: "DeepSeek concludes high overall alignment (87.7%) with top-tier consensus grades. The minor divergence reflects grading leniency: Gemini evaluates the track as a finished commercial benchmark, whereas GPT and Qwen apply rigorous analytical optimization standards. DeepSeek synthesizes these into a definitive 91/A+ score, confirming stellar market readiness and cross-demographic appeal."
+        }
+    };
+
     async function startAnalysis() {
-        const artist = document.getElementById('artist-input').value;
-        const song = document.getElementById('song-input').value;
+        const select = document.getElementById('song-select');
+        const selectedSongKey = select.value;
+        const trackData = trackDatabase[selectedSongKey];
+
         const btn = document.getElementById('start-btn');
         const stepsWrapper = document.getElementById('steps-wrapper');
         const resultsSection = document.getElementById('results-section');
-
-        if(!artist || !song) {
-            alert('Please enter both artist and song name!');
-            return;
-        }
 
         // Reset UI state
         btn.disabled = true;
@@ -349,39 +452,75 @@
             s.querySelector('.step-icon').textContent = '⏳';
         });
 
-        // Step 1
+        // Step 1 Simulation
         const s1 = document.getElementById('step-1');
         s1.classList.add('active');
-        await sleep(1000);
+        await sleep(2000);
         s1.classList.remove('active');
         s1.classList.add('completed');
         s1.querySelector('.step-icon').textContent = '✅';
 
-        // Step 2
+        // Step 2 Simulation
         const s2 = document.getElementById('step-2');
         s2.classList.add('active');
-        await sleep(1500);
+        await sleep(3300);
         s2.classList.remove('active');
         s2.classList.add('completed');
         s2.querySelector('.step-icon').textContent = '✅';
 
-        // Step 3
+        // Step 3 Simulation
         const s3 = document.getElementById('step-3');
         s3.classList.add('active');
-        await sleep(1200);
+        await sleep(1000);
         s3.classList.remove('active');
         s3.classList.add('completed');
         s3.querySelector('.step-icon').textContent = '✅';
 
-        // Populate results
-        document.getElementById('res-song').textContent = song;
-        document.getElementById('res-artist').textContent = artist;
-        document.getElementById('val-grade').textContent = '87 / A';
-        document.getElementById('val-prod').textContent = '89 / 100';
-        document.getElementById('val-market').textContent = '91 / 100';
+        // Populate dynamic results from track database
+        document.getElementById('res-song-name').textContent = selectedSongKey;
+        document.getElementById('val-agreement').textContent = trackData.agreement;
+        document.getElementById('val-xgb').textContent = trackData.xgb;
+        document.getElementById('val-grade').textContent = trackData.grade;
 
-        document.getElementById('res-analysis').textContent =
-            `Following independent auditory evaluation by Gemini, GPT-4o, and Qwen Audio, DeepSeek meta-arbitration measured an overall model agreement rate of 92.8%. While minor discrepancies regarding bridge compression were noted between Qwen and Gemini, all models converge on the track's high commercial viability. DeepSeek synthesizes these inputs to recommend targeted playlist positioning on global Synth-Pop hubs, emphasizing the track's stellar production polish and structural resilience.`;
+        // Helper function to render dimensions list
+        function renderDims(dims) {
+            return `
+                <div class="dimension-item">
+                    <div class="dimension-header"><span>Audio Quality</span> <span>${dims.audio.score}</span></div>
+                    <div class="dimension-desc">${dims.audio.text}</div>
+                </div>
+                <div class="dimension-item">
+                    <div class="dimension-header"><span>Genre Placement</span> <span>${dims.genre.score}</span></div>
+                    <div class="dimension-desc">${dims.genre.text}</div>
+                </div>
+                <div class="dimension-item">
+                    <div class="dimension-header"><span>Production Quality</span> <span>${dims.prod.score}</span></div>
+                    <div class="dimension-desc">${dims.prod.text}</div>
+                </div>
+                <div class="dimension-item">
+                    <div class="dimension-header"><span>Possible Improvements</span> <span>${dims.imp.score}</span></div>
+                    <div class="dimension-desc">${dims.imp.text}</div>
+                </div>
+                <div class="dimension-item">
+                    <div class="dimension-header"><span>Prediction Grade</span> <span>${dims.grade.score}</span></div>
+                    <div class="dimension-desc">${dims.grade.text}</div>
+                </div>
+            `;
+        }
+
+        document.getElementById('gem-dims').innerHTML = renderDims(trackData.gemini);
+        document.getElementById('gpt-dims').innerHTML = renderDims(trackData.gpt);
+        document.getElementById('qwen-dims').innerHTML = renderDims(trackData.qwen);
+
+        // Populate agreements & disagreements
+        const agrList = document.getElementById('res-agreements');
+        agrList.innerHTML = trackData.agreements.map(a => `<li>${a}</li>`).join('');
+
+        const disagList = document.getElementById('res-disagreements');
+        disagList.innerHTML = trackData.disagreements.map(d => `<li>${d}</li>`).join('');
+
+        // Arbitration text
+        document.getElementById('res-arbitration').textContent = trackData.arbitration;
 
         resultsSection.style.display = 'block';
         btn.disabled = false;
