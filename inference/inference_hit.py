@@ -1,7 +1,8 @@
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-import pickle
+from functools import lru_cache
 import numpy as np
 import pandas as pd
 import xgboost as xgb
@@ -11,86 +12,69 @@ from audio.ai.gemini import Gemini
 from audio.ai.gpt import Gpt
 from audio.utils.audio_utils import extract_peak_window, get_audiobox_data, get_librosa_data
 from audio.agent.talent.talent_agent import TalentAgent
+from inference.hit_model import (
+    META_PATH, MODEL_DIR, MODEL_PATH, artist_catalog, build_feature_row, hit_probability,
+    load_hit_model, parse_genres, popularity_percentile,
+)
 
 load_dotenv()
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_DIR = PROJECT_ROOT / "data" / "models"
+
+
+@lru_cache(maxsize=1)
+def _talent_agent() -> TalentAgent:
+    return TalentAgent()
 
 
 def predict_xgboost_popularity(librosa_features: dict, artist_name: str, audiobox_features: dict = None) -> dict:
     """
-    Učitava sačuvani XGBoost model, skaler i listu obeležja,
-    povlači podatke o izvođaču preko TalentAgent-a, priprema podatke
-    i vraća predviđenu popularnost.
+    Učitava XGBoost hit model (inference/hit_model.py), povlači podatke o izvođaču
+    preko TalentAgent-a, formira obeležja identično treningu i vraća predviđenu popularnost.
     """
-    model_path = MODEL_DIR / "xgboost_audio_model.pkl"
-    print(model_path)
-    scaler_path = MODEL_DIR / "feature_scaler.pkl"
-    cols_path = MODEL_DIR / "feature_cols.pkl"
+    if not MODEL_PATH.exists() or not META_PATH.exists():
+        return {"error": "XGBoost model nije pronađen. Pokreni: python -m neural.mlp.train_xgboost"}
 
-    if not model_path.exists() or not scaler_path.exists() or not cols_path.exists():
-        return {"error": "XGBoost modeli ili prateći fajlovi nisu pronađeni na disku."}
+    model, meta = load_hit_model()
+    feature_cols = meta["feature_cols"]
 
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
-    with open(scaler_path, "rb") as f:
-        scaler = pickle.load(f)
-    with open(cols_path, "rb") as f:
-        feature_cols = pickle.load(f)
+    talent_data = _talent_agent().fetch_talent_data(artist_name)
+    artist_found = bool(talent_data.get("found", False))
 
-    # Inicijalizujemo TalentAgent i dobijamo podatke o izvođaču
-    talent_agent = TalentAgent()
-    talent_data = talent_agent.fetch_talent_data(artist_name)
-
-    # Kreiramo rečnik sa podrazumevanim vrednostima
-    row_data = {col: 0.0 for col in feature_cols}
-
-    # Popunjavamo librosa i Audiobox (PQ, PC, CE, CU) karakteristike
-    for k, v in {**librosa_features, **(audiobox_features or {})}.items():
-        if k in row_data:
-            row_data[k] = float(v) if v is not None else 0.0
-
-    # Popunjavamo artist metrike iz TalentAgent-a ako je izvođač pronađen u datasetu
-    if talent_data.get("found", False):
+    if artist_found:
         spotify_info = talent_data.get("spotify_data", {})
-        artist_pop = spotify_info.get("artist_popularity", 10.0)
-        followers = spotify_info.get("followers", 10000)
-        print(f"pronađen u datasetu: Popularnost={artist_pop}, Pratioci={followers}")
+        artist_pop = spotify_info.get("artist_popularity", 0.0)
+        followers = spotify_info.get("followers", 0)
+        genres = parse_genres(spotify_info.get("genres", []))
+        catalog_mean, catalog_count = artist_catalog(spotify_info.get("spotify_id", ""))
+        print(f"pronađen u datasetu: Popularnost={artist_pop}, Pratioci={followers}, Katalog={catalog_count} pesama")
     else:
-        # Fallback vrednosti ako izvođač ne postoji u bazi
-        artist_pop = 10.0
-        followers = 10000
-        print(f"Izvođač '{artist_name}' nije pronađen u datasetu. Koristim podrazumevane vrednosti.")
+        # Neutralan profil (medijana trening skupa) umesto kažnjavanja nepoznatog izvođača
+        artist_pop = meta["artist_fallback"]["artist_popularity"]
+        followers = meta["artist_fallback"]["followers"]
+        genres, catalog_mean, catalog_count = [], None, 0
+        print(f"Izvođač '{artist_name}' nije pronađen u datasetu. Koristim tipičan (medijana) profil izvođača.")
 
-    if "artist_popularity" in row_data:
-        row_data["artist_popularity"] = float(artist_pop)
-    if "followers" in row_data:
-        row_data["followers"] = float(followers)
-
-    # Konverzija u niz redosledom kojim je model treniran
+    row_data = build_feature_row(
+        feature_cols,
+        {**librosa_features, **(audiobox_features or {})},
+        artist_pop, followers, genres, catalog_mean, catalog_count,
+    )
     x_input = np.array([[row_data[col] for col in feature_cols]], dtype=np.float32)
 
-    # Logaritamska transformacija za "followers"
-    if "followers" in feature_cols:
-        followers_idx = feature_cols.index("followers")
-        x_input[:, followers_idx] = np.log1p(x_input[:, followers_idx])
-
-    # Skaliranje
-    x_scaled = scaler.transform(x_input)
-
-    # Predikcija (CPU je dovoljan za jedan red i ne zahteva GPU na mašini za demo)
-    model.set_params(device="cpu")
-    predicted_popularity = float(model.predict(x_scaled)[0])
+    predicted_popularity = float(np.clip(model.predict(x_input)[0], 0.0, 100.0))
 
     # Doprinos svakog obeležja predikciji (SHAP vrednosti ugrađene u XGBoost)
-    contribs = model.get_booster().predict(xgb.DMatrix(x_scaled), pred_contribs=True)[0]
+    contribs = model.get_booster().predict(xgb.DMatrix(x_input), pred_contribs=True)[0]
     feature_contributions = {col: float(c) for col, c in zip(feature_cols, contribs[:-1])}
 
     return {
         "predicted_popularity": round(predicted_popularity, 2),
+        "hit_probability": round(hit_probability(predicted_popularity, meta), 4),
+        "percentile": round(popularity_percentile(predicted_popularity, meta), 1),
         "artist_name": artist_name,
+        "artist_found": artist_found,
         "talent_data_used": talent_data,
         "model_inputs": row_data,
         "feature_contributions": feature_contributions,
@@ -146,38 +130,42 @@ def get_ai_analysis(features_str: str, audio_file_path: str = None, artist_name:
         f"     For every json property give two fields, numeric value that is a value in number format from 0 to 100 and analysis that is descriptive. Value for possible improvements should be higher if demand for improvements are lower and vice versa.\n"
     )
 
-    # 1. Poziv Gemini modela
-    gemini_analysis = Gemini().get_analysis(prompt, audio_file_path=audio_file_path)
+    # 1. Gemini i GPT slušaju fajl paralelno; pad jednog modela ne prekida ostale
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        gemini_future = pool.submit(Gemini().get_analysis, prompt, audio_file_path=audio_file_path)
+        gpt_future = pool.submit(Gpt().get_analysis, prompt, audio_file_path=audio_file_path)
+        gemini_analysis = gemini_future.result()
+        gpt_analysis = gpt_future.result()
 
-    # USLOV: Ako Gemini padne/vrati grešku, prekidamo izvršavanje da ne trošimo tokene na GPT i DeepSeek
-    if gemini_analysis.startswith("Error communicating"):
-        return {
-            "error": "Gemini API call failed. Aborting subsequent AI agent calls to save tokens.",
-            "gemini": gemini_analysis,
-            "gpt": None,
-            "deep_seek": None
-        }
+    errors = []
+    if _llm_failed(gemini_analysis):
+        errors.append("Gemini")
+        gemini_analysis_ok = None
+    else:
+        gemini_analysis_ok = gemini_analysis
+    if _llm_failed(gpt_analysis):
+        errors.append("GPT")
+        gpt_analysis_ok = None
+    else:
+        gpt_analysis_ok = gpt_analysis
 
-    # 2. Poziv GPT modela (izvršava se samo ako je Gemini uspešan)
-    gpt_analysis = Gpt().get_analysis(prompt, audio_file_path=audio_file_path)
-
-    # Opciono: Možeš dodati proveru i za GPT ukoliko želiš, mada je Gemini prvi u lancu.
-    if gpt_analysis.startswith("Error communicating"):
-        return {
-            "error": "GPT API call failed.",
-            "gemini": gemini_analysis,
-            "gpt": gpt_analysis,
-            "deep_seek": None
-        }
-
-    # 3. Poziv DeepSeek meta-arbitraže
-    deep_seek_analysis = Deepseek().get_analysis(gemini_analysis, gpt_analysis)
+    # 2. DeepSeek meta-arbitraža nad modelima koji su uspeli
+    deep_seek_analysis = None
+    if gemini_analysis_ok or gpt_analysis_ok:
+        deep_seek_analysis = Deepseek().get_analysis(gemini_analysis_ok, gpt_analysis_ok)
+        if _llm_failed(deep_seek_analysis):
+            errors.append("DeepSeek")
 
     return {
+        "error": f"{', '.join(errors)} API call failed." if errors else None,
         "deep_seek": deep_seek_analysis,
         "gemini": gemini_analysis,
         "gpt": gpt_analysis
     }
+
+
+def _llm_failed(text) -> bool:
+    return not text or text.startswith("Error communicating")
 
 
 def main():

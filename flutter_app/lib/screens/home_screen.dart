@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -7,11 +6,6 @@ import 'package:flutter/material.dart';
 import '../api/hit_song_api.dart';
 import '../api/models.dart';
 import '../theme.dart';
-import '../widgets/common.dart';
-import '../widgets/input_panel.dart';
-import '../widgets/llm_section.dart';
-import '../widgets/pipeline_tracker.dart';
-import '../widgets/prediction_section.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,628 +18,379 @@ class _HomeScreenState extends State<HomeScreen> {
   final _api = HitSongApi();
   final _artistController = TextEditingController();
 
-  ModelInfo? _modelInfo;
-  bool _backendOnline = true;
-
-  PlatformFile? _file;
+  String? _fileName;
   Uint8List? _fileBytes;
 
-  StepStatus _mlStatus = StepStatus.pending;
-  StepStatus _llmStatus = StepStatus.pending;
+  bool _loading = false;
+  String? _error;
   PredictionResult? _prediction;
   LlmAnalysis? _llm;
-  String? _mlError;
   String? _llmError;
 
-  Timer? _ticker;
-  int _llmElapsed = 0;
-
-  bool get _busy => _mlStatus == StepStatus.running;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkBackend();
-  }
+  bool get _canSubmit =>
+      !_loading &&
+      _fileBytes != null &&
+      _artistController.text.trim().isNotEmpty;
 
   @override
   void dispose() {
-    _ticker?.cancel();
     _artistController.dispose();
     super.dispose();
   }
 
-  Future<void> _checkBackend() async {
-    try {
-      final info = await _api.health();
-      if (mounted) setState(() => (_modelInfo = info, _backendOnline = true));
-    } catch (_) {
-      if (mounted) setState(() => _backendOnline = false);
-    }
-  }
-
-  Future<void> _onFilePicked(PlatformFile file) async {
+  Future<void> _pickFile() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: const ['mp3', 'wav'],
+    );
+    if (file == null) return;
     final bytes = await file.readAsBytes();
     setState(() {
-      _file = file;
+      _fileName = file.name;
       _fileBytes = bytes;
     });
   }
 
-  Future<void> _runPrediction() async {
-    final file = _file;
+  Future<void> _run() async {
     final bytes = _fileBytes;
-    if (file == null || bytes == null) return;
+    if (bytes == null) return;
 
-    _ticker?.cancel();
     setState(() {
-      _mlStatus = StepStatus.running;
-      _llmStatus = StepStatus.pending;
+      _loading = true;
+      _error = null;
       _prediction = null;
       _llm = null;
-      _mlError = null;
       _llmError = null;
     });
 
     try {
-      final result = await _api.predict(
+      final prediction = await _api.predict(
         artistName: _artistController.text.trim(),
-        fileName: file.name,
+        fileName: _fileName!,
         bytes: bytes,
       );
+      LlmAnalysis? llm;
+      String? llmError;
+      try {
+        llm = await _api.analyze(prediction.jobId);
+      } catch (e) {
+        llmError = _describe(e);
+      }
       if (!mounted) return;
       setState(() {
-        _prediction = result;
-        _mlStatus = StepStatus.done;
-        _backendOnline = true;
-      });
-      _runLlm();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _mlStatus = StepStatus.error;
-        _mlError = _describe(e);
-      });
-    }
-  }
-
-  Future<void> _runLlm() async {
-    final jobId = _prediction?.jobId;
-    if (jobId == null) return;
-
-    _ticker?.cancel();
-    setState(() {
-      _llmStatus = StepStatus.running;
-      _llmError = null;
-      _llmElapsed = 0;
-    });
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _llmElapsed++);
-    });
-
-    try {
-      final result = await _api.analyze(jobId);
-      if (!mounted || _prediction?.jobId != jobId) return;
-      final failed = result.error != null && result.consensus.isEmpty;
-      setState(() {
-        _llm = result;
-        _llmStatus = failed ? StepStatus.error : StepStatus.done;
-        _llmError = failed ? result.error : null;
+        _prediction = prediction;
+        _llm = llm;
+        _llmError = llmError;
       });
     } catch (e) {
-      if (!mounted || _prediction?.jobId != jobId) return;
-      setState(() {
-        _llmStatus = StepStatus.error;
-        _llmError = _describe(e);
-      });
+      if (mounted) setState(() => _error = _describe(e));
     } finally {
-      _ticker?.cancel();
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  String _describe(Object e) {
-    if (e is ApiException) return e.message;
-    _backendOnline = false;
-    return 'Cannot reach the prediction server at $apiBaseUrl. '
-        'Start it with run_api.ps1 in the project root.';
-  }
+  String _describe(Object e) => e is ApiException
+      ? e.message
+      : 'Cannot reach the prediction server at $apiBaseUrl.';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          const _Backdrop(),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 1100;
-                final hPad = constraints.maxWidth < 600 ? 16.0 : 32.0;
-                final sidebar = _buildSidebar();
-                final results = _buildResults();
-
-                return SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(hPad, 24, hPad, 40),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1440),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _Header(
-                            info: _modelInfo,
-                            online: _backendOnline,
-                            onRetry: _checkBackend,
-                          ),
-                          const SizedBox(height: 28),
-                          if (wide)
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(width: 380, child: sidebar),
-                                const SizedBox(width: 24),
-                                Expanded(child: results),
-                              ],
-                            )
-                          else ...[
-                            sidebar,
-                            const SizedBox(height: 24),
-                            results,
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSidebar() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InputPanel(
-          api: _api,
-          artistController: _artistController,
-          file: _file,
-          fileSize: _fileBytes?.length,
-          busy: _busy,
-          onFilePicked: _onFilePicked,
-          onSubmit: _runPrediction,
-        ),
-        const SizedBox(height: 20),
-        PipelineTracker(
-          mlStatus: _mlStatus,
-          llmStatus: _llmStatus,
-          mlSeconds: _prediction?.elapsedSec,
-          llmSeconds: _llm?.elapsedSec,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildResults() {
-    final prediction = _prediction;
-
-    if (_mlStatus == StepStatus.error) {
-      return _MessageCard(
-        icon: Icons.error_outline_rounded,
-        color: AppColors.negative,
-        title: 'Prediction failed',
-        message: _mlError ?? 'Unknown error',
-      );
-    }
-    if (_mlStatus == StepStatus.running) {
-      return const _MessageCard(
-        icon: Icons.graphic_eq_rounded,
-        color: AppColors.violet,
-        title: 'Extracting features and running XGBoost…',
-        message:
-            'Finding the peak 30-second window, computing Librosa and Audiobox '
-            'features and looking up the artist.',
-        loading: true,
-      );
-    }
-    if (prediction == null) return const _EmptyState();
-
-    const gap = SizedBox(height: 20);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        LayoutBuilder(
-          builder: (context, c) {
-            final score = ScoreCard(result: prediction);
-            final artist = ArtistCard(
-              artist: prediction.artist,
-              window: prediction.window,
-            );
-            if (c.maxWidth < 760) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [score, gap, artist],
-              );
-            }
-            return IntrinsicHeight(
-              child: Row(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: score),
-                  const SizedBox(width: 20),
-                  Expanded(child: artist),
+                  const Text(
+                    'Hit Song Predictor',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildForm(),
+                  const SizedBox(height: 28),
+                  ..._buildResults(),
                 ],
               ),
-            );
-          },
+            ),
+          ),
         ),
-        gap,
-        ExplainabilityCard(result: prediction),
-        gap,
-        AudioProfileCard(result: prediction),
-        const SizedBox(height: 36),
-        const _SectionDivider('LLM expert analysis'),
-        const SizedBox(height: 20),
-        ..._buildLlmCards(prediction),
-      ],
+      ),
     );
   }
 
-  List<Widget> _buildLlmCards(PredictionResult prediction) {
-    const gap = SizedBox(height: 20);
-    switch (_llmStatus) {
-      case StepStatus.pending:
-      case StepStatus.running:
-        return [LlmLoadingCard(elapsedSeconds: _llmElapsed)];
-      case StepStatus.error:
-        return [
-          LlmErrorCard(message: _llmError ?? 'Unknown error', onRetry: _runLlm),
-        ];
-      case StepStatus.done:
-        final llm = _llm!;
-        return [
-          if (llm.error != null) ...[
-            _MessageCard(
-              icon: Icons.warning_amber_rounded,
-              color: AppColors.warning,
-              title: 'Partial result',
-              message: llm.error!,
-            ),
-            gap,
-          ],
-          ConsensusCard(analysis: llm),
-          gap,
-          AgreementCard(
-            analysis: llm,
-            xgboostPopularity: prediction.popularity,
+  Widget _buildForm() {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _artistController,
+            enabled: !_loading,
+            decoration: const InputDecoration(labelText: 'Artist name'),
+            onChanged: (_) => setState(() {}),
           ),
-          gap,
-          ModelReportsCard(analysis: llm),
-        ];
-    }
-  }
-}
-
-class _Header extends StatelessWidget {
-  final ModelInfo? info;
-  final bool online;
-  final VoidCallback onRetry;
-  const _Header({
-    required this.info,
-    required this.online,
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final status = online && info != null
-        ? Pill(
-            '${info!.model} · ${info!.nFeatures} features · online',
-            color: AppColors.positive,
-            icon: Icons.circle,
-          )
-        : online
-        ? const Pill('Connecting…', icon: Icons.circle)
-        : InkWell(
-            onTap: onRetry,
-            borderRadius: BorderRadius.circular(99),
-            child: const Pill(
-              'Server offline · tap to retry',
-              color: AppColors.negative,
-              icon: Icons.circle,
-            ),
-          );
-
-    final title = Row(
-      children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            gradient: AppColors.brandGradient,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.violet.withValues(alpha: 0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.equalizer_rounded,
-            color: Colors.white,
-            size: 28,
-          ),
-        ),
-        const SizedBox(width: 14),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 16),
+          Row(
             children: [
-              Text(
-                'Hit Song Predictor',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _pickFile,
+                icon: const Icon(Icons.upload_file_rounded),
+                label: const Text('Upload audio'),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _fileName ?? 'No file selected (MP3 or WAV)',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppColors.textSecondary),
                 ),
               ),
-              SizedBox(height: 2),
-              Text(
-                'Song popularity forecasting with XGBoost and a multi-LLM expert panel',
-                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              ),
             ],
-          ),
-        ),
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, c) => c.maxWidth < 760
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [title, const SizedBox(height: 14), status],
-            )
-          : Row(
-              children: [
-                Expanded(child: title),
-                const SizedBox(width: 16),
-                status,
-              ],
-            ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    const features = [
-      (
-        Icons.account_tree_rounded,
-        'XGBoost regression',
-        '38 features: Audiobox aesthetics, artist reach and Librosa descriptors.',
-      ),
-      (
-        Icons.insights_rounded,
-        'Explainable output',
-        'TreeSHAP shows exactly which features raise or lower the score.',
-      ),
-      (
-        Icons.headphones_rounded,
-        'LLMs that listen',
-        'Gemini and GPT-audio review the actual recording, not only the numbers.',
-      ),
-      (
-        Icons.hub_rounded,
-        'Consensus arbitration',
-        'DeepSeek reconciles both experts into one final report.',
-      ),
-    ];
-    return SectionCard(
-      padding: const EdgeInsets.all(36),
-      child: Column(
-        children: [
-          Container(
-            width: 84,
-            height: 84,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.violet.withValues(alpha: 0.12),
-              border: Border.all(
-                color: AppColors.violet.withValues(alpha: 0.35),
-              ),
-            ),
-            child: const Icon(
-              Icons.library_music_rounded,
-              size: 38,
-              color: AppColors.violet,
-            ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'Predict the popularity of a song',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Enter the artist, upload an MP3 or WAV file and run the hybrid pipeline.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 32),
-          LayoutBuilder(
-            builder: (context, c) {
-              final columns = c.maxWidth > 700 ? 2 : 1;
-              final width = (c.maxWidth - (columns - 1) * 16) / columns;
-              return Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: [
-                  for (final f in features)
-                    SizedBox(
-                      width: width,
-                      child: Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceHigh,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(f.$1, color: AppColors.pink, size: 22),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    f.$2,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    f.$3,
-                                    style: const TextStyle(
-                                      fontSize: 12.5,
-                                      height: 1.45,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
+          FilledButton(
+            onPressed: _canSubmit ? _run : null,
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            child: const Text('Predict'),
           ),
         ],
       ),
     );
   }
+
+  List<Widget> _buildResults() {
+    if (_loading) {
+      return const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    if (_error != null) {
+      return [_Message(_error!, color: AppColors.negative)];
+    }
+    final prediction = _prediction;
+    if (prediction == null) return const [];
+
+    final reports = _llm?.reports ?? const <LlmReport>[];
+    return [
+      _ScoreCard(prediction),
+      const SizedBox(height: 20),
+      if (reports.isEmpty)
+        _Message(
+          _llmError ?? 'LLM explanations are not available for this track.',
+        ),
+      for (final report in reports) ...[
+        _ReportCard(report),
+        const SizedBox(height: 20),
+      ],
+    ];
+  }
 }
 
-class _MessageCard extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String message;
-  final bool loading;
+class _Card extends StatelessWidget {
+  final Widget child;
+  const _Card({required this.child});
 
-  const _MessageCard({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.message,
-    this.loading = false,
-  });
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: child,
+  );
+}
+
+class _Message extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _Message(this.text, {this.color = AppColors.textSecondary});
+
+  @override
+  Widget build(BuildContext context) => _Card(
+    child: Text(text, style: TextStyle(color: color, height: 1.45)),
+  );
+}
+
+class _ScoreCard extends StatelessWidget {
+  final PredictionResult result;
+  const _ScoreCard(this.result);
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      child: Row(
+    final color = AppColors.score(result.popularity);
+    return _Card(
+      child: Column(
         children: [
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (loading)
-                  SizedBox.expand(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: color,
-                    ),
-                  ),
-                Icon(icon, color: color),
-              ],
-            ),
+          const Text(
+            'Predicted popularity (XGBoost)',
+            style: TextStyle(color: AppColors.textSecondary),
           ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 8),
+          Text.rich(
+            TextSpan(
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                TextSpan(
+                  text: result.popularity.toStringAsFixed(1),
+                  style: TextStyle(
+                    fontSize: 56,
+                    fontWeight: FontWeight.w700,
+                    color: color,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.45,
+                const TextSpan(
+                  text: ' / 100',
+                  style: TextStyle(
+                    fontSize: 20,
                     color: AppColors.textSecondary,
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            result.tier,
+            style: TextStyle(fontWeight: FontWeight.w600, color: color),
+          ),
+          const Divider(height: 32),
+          Row(
+            children: [
+              Expanded(
+                child: _Stat(
+                  value: '${(result.hitProbability * 100).toStringAsFixed(0)}%',
+                  label:
+                      'Hit probability\n(popularity ≥ ${result.hitThreshold})',
+                ),
+              ),
+              Expanded(
+                child: _Stat(
+                  value: '${result.percentile.toStringAsFixed(0)}%',
+                  label: 'Scores higher than\nthis share of songs',
+                ),
+              ),
+            ],
+          ),
+          if (!result.artistFound) ...[
+            const SizedBox(height: 20),
+            const Text(
+              'Artist not found in the dataset. A typical artist profile was '
+              'assumed, so the prediction is based mostly on the audio.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.45,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _SectionDivider extends StatelessWidget {
+class _Stat extends StatelessWidget {
+  final String value;
   final String label;
-  const _SectionDivider(this.label);
+  const _Stat({required this.value, required this.label});
 
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Column(
     children: [
       Text(
-        label.toUpperCase(),
+        value,
         style: const TextStyle(
-          fontSize: 12,
-          letterSpacing: 1.4,
-          fontWeight: FontWeight.w600,
+          fontSize: 24,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        label,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 12.5,
+          height: 1.4,
           color: AppColors.textSecondary,
         ),
       ),
-      const SizedBox(width: 14),
-      const Expanded(child: Divider(height: 1)),
     ],
   );
 }
 
-class _Backdrop extends StatelessWidget {
-  const _Backdrop();
+class _ReportCard extends StatelessWidget {
+  final LlmReport report;
+  const _ReportCard(this.report);
 
   @override
-  Widget build(BuildContext context) => Positioned.fill(
-    child: IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: const Alignment(-0.9, -1.1),
-            radius: 1.4,
-            colors: [
-              AppColors.violet.withValues(alpha: 0.16),
-              AppColors.background,
-            ],
+  Widget build(BuildContext context) {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            report.name,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
           ),
-        ),
+          const SizedBox(height: 12),
+          if (report.metrics.isEmpty)
+            SelectableText(
+              report.raw ?? '',
+              style: const TextStyle(height: 1.5),
+            ),
+          for (final (i, metric) in report.metrics.indexed) ...[
+            if (i > 0) const Divider(height: 28),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    metric.label,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (metric.score != null)
+                  Text(
+                    metric.score!.toStringAsFixed(0),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.score(metric.score!),
+                    ),
+                  ),
+              ],
+            ),
+            if (metric.analysis.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              SelectableText(
+                metric.analysis,
+                style: const TextStyle(
+                  height: 1.5,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ],
+        ],
       ),
-    ),
-  );
+    );
+  }
 }

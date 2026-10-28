@@ -117,9 +117,12 @@ class TalentAgent:
 
         # 1. Extract from local Spotify Dataset
         if df is not None:
-            matches = df[df["name"].str.lower() == talent_name.lower()]
+            matches = df[df["name"].str.lower() == talent_name.strip().lower()]
 
             if not matches.empty:
+                # Više izvođača može imati isto ime - biramo najpopularnijeg
+                best_id = matches.sort_values("artist_popularity", ascending=False).iloc[0]["id"]
+                matches = matches[matches["id"] == best_id]
                 artist_info = matches.iloc[0]
                 tracks = (
                     matches[["track_id", "track_name_prev"]]

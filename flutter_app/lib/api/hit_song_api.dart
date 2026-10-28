@@ -26,27 +26,9 @@ class HitSongApi {
 
   HitSongApi({this.baseUrl = apiBaseUrl});
 
-  Uri _uri(String path, [Map<String, String>? query]) =>
-      Uri.parse('$baseUrl$path').replace(queryParameters: query);
+  Uri _uri(String path) => Uri.parse('$baseUrl$path');
 
-  Future<ModelInfo> health() async {
-    final res = await _client
-        .get(_uri('/api/health'))
-        .timeout(const Duration(seconds: 5));
-    return ModelInfo.fromJson(_decode(res) as Map<String, dynamic>);
-  }
-
-  Future<List<ArtistSuggestion>> searchArtists(String query) async {
-    if (query.trim().length < 2) return const [];
-    final res = await _client
-        .get(_uri('/api/artists', {'q': query}))
-        .timeout(const Duration(seconds: 5));
-    return (_decode(res) as List)
-        .map((e) => ArtistSuggestion.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-
-  /// Phase 1: peak 30 s window -> Librosa + Audiobox -> TalentAgent -> XGBoost.
+  /// XGBoost popularity prediction.
   Future<PredictionResult> predict({
     required String artistName,
     required String fileName,
@@ -64,7 +46,7 @@ class HitSongApi {
     return PredictionResult.fromJson(_decode(res) as Map<String, dynamic>);
   }
 
-  /// Phase 2: Gemini + GPT listen to the track, DeepSeek builds the consensus.
+  /// LLM explanations (Gemini, GPT, DeepSeek consensus) for the same upload.
   Future<LlmAnalysis> analyze(String jobId) async {
     final res = await _client
         .post(_uri('/api/analysis/$jobId'))

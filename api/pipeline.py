@@ -6,7 +6,7 @@ Sva logika predikcije i LLM analize dolazi iz:
 """
 import ast
 import json
-import pickle
+import math
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -14,7 +14,8 @@ from pathlib import Path
 import pandas as pd
 
 from audio.utils.audio_utils import extract_peak_window, get_audiobox_data, get_librosa_data
-from inference.inference_hit import MODEL_DIR, get_ai_analysis, predict_xgboost_popularity
+from inference.hit_model import load_hit_model
+from inference.inference_hit import get_ai_analysis, predict_xgboost_popularity
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ARTISTS_CSV = PROJECT_ROOT / "data" / "dataset" / "spotify_artists.csv"
@@ -28,6 +29,8 @@ FEATURE_LABELS = {
     "CU": "Content Usefulness",
     "artist_popularity": "Artist popularity",
     "followers": "Followers",
+    "catalog_mean_popularity": "Artist track record",
+    "catalog_track_count": "Artist catalog size",
     "librosa_tempo": "Tempo",
     "librosa_energy": "Energy (RMS)",
     "librosa_spectral_centroid": "Spectral centroid",
@@ -42,7 +45,7 @@ FEATURE_LABELS = {
 # Iste grupe kao u neural/mlp/get_audio_features_for_example_song.py
 FEATURE_GROUPS = {
     "Production agent": ["PQ", "PC", "CE", "CU"],
-    "Talent agent": ["artist_popularity", "followers"],
+    "Talent agent": ["artist_popularity", "followers", "catalog_mean_popularity", "catalog_track_count"],
 }
 
 LLM_METRIC_LABELS = {
@@ -56,7 +59,20 @@ LLM_METRIC_LABELS = {
 }
 
 
+def _json_number(value):
+    """NaN (nepoznata vrednost) nije validan JSON - šaljemo null."""
+    return None if value is None or math.isnan(value) else value
+
+
+def feature_label(feature: str) -> str:
+    if feature.startswith("genre_"):
+        return f"Genre: {feature[len('genre_'):]}"
+    return FEATURE_LABELS.get(feature, feature)
+
+
 def feature_group(feature: str) -> str:
+    if feature.startswith("genre_"):
+        return "Talent agent"
     for group, cols in FEATURE_GROUPS.items():
         if feature in cols:
             return group
@@ -65,17 +81,13 @@ def feature_group(feature: str) -> str:
 
 @lru_cache(maxsize=1)
 def model_info() -> dict:
-    with open(MODEL_DIR / "xgboost_audio_model.pkl", "rb") as f:
-        model = pickle.load(f)
-    with open(MODEL_DIR / "feature_cols.pkl", "rb") as f:
-        feature_cols = pickle.load(f)
-    params = model.get_params()
+    _, meta = load_hit_model()
     return {
-        "model": "XGBoost Regressor",
-        "n_features": len(feature_cols),
-        "n_estimators": params.get("n_estimators"),
-        "max_depth": params.get("max_depth"),
-        "learning_rate": params.get("learning_rate"),
+        "model": meta["model"],
+        "n_features": len(meta["feature_cols"]),
+        "params": meta["params"],
+        "metrics": meta["metrics"],
+        "hit_threshold": meta["hit_threshold"],
         "llms": ["Gemini", "GPT (audio)", "DeepSeek (consensus)"],
     }
 
@@ -149,9 +161,9 @@ def run_prediction(audio_path: str, window_path: str, artist_name: str) -> dict:
         (
             {
                 "feature": f,
-                "label": FEATURE_LABELS.get(f, f),
+                "label": feature_label(f),
                 "group": feature_group(f),
-                "value": xgb_result["model_inputs"].get(f),
+                "value": _json_number(xgb_result["model_inputs"].get(f)),
                 "contribution": round(c, 3),
             }
             for f, c in xgb_result["feature_contributions"].items()
@@ -168,6 +180,10 @@ def run_prediction(audio_path: str, window_path: str, artist_name: str) -> dict:
             "popularity": score,
             "tier": popularity_tier(score),
             "base_value": round(xgb_result["base_value"], 2),
+            "hit_probability": xgb_result["hit_probability"],
+            "hit_threshold": model_info()["hit_threshold"],
+            "percentile": xgb_result["percentile"],
+            "artist_found": xgb_result["artist_found"],
         },
         "window": window,
         "artist": _artist_summary(xgb_result["talent_data_used"]),
@@ -230,18 +246,24 @@ def _normalize_llm_output(text) -> dict:
 
 
 def run_llm_analysis(audio_path: str, artist_name: str, librosa_features: dict, talent_data: dict) -> dict:
-    """Spora faza: Gemini + GPT slušaju fajl, DeepSeek pravi konsenzus (inference_hit.get_ai_analysis)."""
+    """Spora faza: Gemini + GPT slušaju fajl, DeepSeek pravi konsenzus nad modelima koji su uspeli."""
     result = get_ai_analysis(
         str(librosa_features),
         audio_file_path=audio_path,
         artist_name=artist_name,
         talent_data=talent_data,
     )
-    return {
-        "error": result.get("error"),
-        "consensus": _normalize_llm_output(result.get("deep_seek")),
-        "models": {
-            "gemini": _normalize_llm_output(result.get("gemini")),
-            "gpt": _normalize_llm_output(result.get("gpt")),
-        },
+    reports = {
+        "deepseek": result.get("deep_seek"),
+        "gemini": result.get("gemini"),
+        "gpt": result.get("gpt"),
     }
+    models = {}
+    for name, text in reports.items():
+        failed = not text or text.startswith("Error communicating")
+        models[name] = {
+            "ok": not failed,
+            "error": (text or "Not run (no upstream model succeeded).") if failed else None,
+            **(_normalize_llm_output(text) if not failed else {"metrics": [], "raw": None, "parsed": False}),
+        }
+    return {"error": result.get("error"), "models": models}

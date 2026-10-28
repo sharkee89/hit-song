@@ -11,7 +11,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(const HitSongApp());
     expect(find.text('Hit Song Predictor'), findsOneWidget);
-    expect(find.text('Predict popularity'), findsOneWidget);
-    expect(find.text('Choose an audio file'), findsOneWidget);
+    expect(find.text('Upload audio'), findsOneWidget);
+    expect(find.text('Predict'), findsOneWidget);
   });
 }
